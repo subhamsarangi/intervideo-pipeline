@@ -1,0 +1,38 @@
+Role: Generative AI Developer
+
+Experience: 3–5 years
+
+Locations- Bangalore / Gurgaon / Indore / Noida / Pune / Chennai
+
+
+
+Required Skills & Qualifications
+
+Minimum of 3 years of professional experience in software development.
+Strong proficiency in Python programming.
+Hands-on experience with at least one cloud platform.
+Exposure to Large Language Models (LLMs) and generative AI concepts.
+Excellent problem-solving abilities, analytical mindset, and keen attention to detail.
+Strong verbal and written communication skills with the ability to collaborate effectively in a team environment.
+
+
+Roles & Responsibilities
+
+Design, develop, and deploy generative AI applications using Python and cloud-based AI/ML services.
+Collaborate closely with product managers, data scientists, and engineering teams to gather requirements and convert them into technical specifications for GenAI solutions.
+Stay current with emerging trends and advancements in generative AI, LLMs, and related technologies.
+Build and integrate APIs and services to enable seamless interaction between GenAI models and existing systems.
+Write clean, efficient, reusable, and well-documented code following industry best practices.
+Identify, troubleshoot, and debug application issues to ensure high performance and reliability.
+Develop and maintain unit test cases to ensure code quality and robustness.
+
+
+Good-to-Have Skills & Experience
+
+Experience designing and consuming RESTful APIs and working with microservices architectures.
+Hands-on experience with Retrieval-Augmented Generation (RAG) frameworks and implementations.
+Familiarity with LangChain or similar orchestration frameworks.
+Working knowledge of AWS Cloud.
+
+
+For Quick Response- Interested Candidates can directly share their resume along with the details like Notice Period, Current CTC and Expected CTC at anubhav.pathania@impetus.com
