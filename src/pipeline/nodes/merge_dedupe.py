@@ -15,23 +15,7 @@ from src.utils.llm_tracking import increment_llm_calls
 import numpy as np
 
 
-DEDUP_SYSTEM_PROMPT = """You are an expert at identifying semantically similar questions.
 
-Your task: Given a list of interview questions, identify which questions are semantically similar (asking roughly the same thing).
-
-Return JSON array with groups of similar questions:
-[
-  {
-    "group_id": 0,
-    "questions": [0, 1, 3],  // indices of similar questions
-    "representative": "Best question text to keep",
-    "reason": "Why these are similar"
-  }
-]
-
-Keep only one question per group. Choose the most specific/valuable one.
-Return ONLY JSON, no markdown.
-"""
 
 
 async def merge_dedupe_node(
