@@ -84,7 +84,7 @@ All tests pass. Coverage: parsers, security, triage, enrichment, generation, mer
 
 Variable based on CV/JD complexity. ~$0.05–0.20 per full pipeline run (parsing + question generation).
 
-## Interview Control Agent (Coming in Phase 15b)
+## Interview Control Agent (Phase 11b, Coming)
 
 The interview control agent will manage:
 - Question flow decisions (next question vs probe deeper)
