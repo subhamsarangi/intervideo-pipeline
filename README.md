@@ -9,7 +9,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 - **LangGraph pipeline** with security, triage, enrichment, question generation, merge, judge, fitness scoring
 - **FastAPI REST API** for client integration
 - **SQLite storage** with full CRUD operations
-- **97 passing tests** with pytest
+- **117 passing tests** with pytest
 
 ## Tech Stack
 
@@ -24,7 +24,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 
 1. **Install dependencies**
    ```bash
-   pip install -e .
+   uv sync
    ```
 
 2. **Set up API keys** in `.env`
@@ -36,7 +36,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 
 3. **Initialize database**
    ```bash
-   python -m src.database.migrate
+   python -m src.database.db
    ```
 
 4. **Run dev server**
@@ -55,29 +55,42 @@ pipeline/
 │   ├── database/         # SQLite schema + CRUD
 │   ├── models/           # Pydantic schemas
 │   ├── parsers/          # CV/JD parsing
-│   ├── pipeline/         # LangGraph nodes + graph
+│   ├── pipeline/
+│   │   └── nodes/        # LangGraph nodes (question generation, merge, judge, etc.)
 │   └── utils/            # Security, embeddings, tracking
-├── tests/                # 97 tests
+├── tests/                # 117 tests
 ├── scripts/              # DB seed/cleanup
+├── demo_*.py             # Live demos
 ├── outputs/              # Generated CV markdown
 └── uploads/              # Uploaded CVs/JDs
 ```
 
+## Pipeline Phases (Implemented)
+
+- **Phase 7:** Project + Skill questions (3-5 per project, 2-3 per skill)
+- **Phase 8:** Merge/dedupe/rerank (embeddings-based dedup, coverage check, JD relevance rerank)
+- **Phase 9:** LLM judge evaluation (in progress)
+- **Phase 10:** CV-JD fitness scoring
+
 ## Testing
 
 ```bash
-pytest
+uv run pytest
 ```
+
+All tests pass. Coverage: parsers, security, triage, enrichment, generation, merge, dedup.
 
 ## Cost
 
 Variable based on CV/JD complexity. ~$0.05–0.20 per full pipeline run (parsing + question generation).
 
-## Requirements
+## Interview Control Agent (Coming in Phase 15b)
 
-- Python 3.11+
-- API keys for OpenAI, LlamaCloud, Tavily
-- ~10MB disk per processed CV
+The interview control agent will manage:
+- Question flow decisions (next question vs probe deeper)
+- Answered questions tracking (state, timestamps)
+- Exit conditions (all questions asked, time limit, fatigue)
+- Answer persistence (save state after each turn)
 
 ---
 
