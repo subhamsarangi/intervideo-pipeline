@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 # Model pricing (per 1M tokens, 2026 rates)
 MODEL_COSTS = {
-    "gpt-5.6-luna": {
+    "gpt-5.4-nano": {
         "input": 0.075,  # $0.075 per 1M input tokens
         "output": 0.30,  # $0.30 per 1M output tokens
     },
@@ -14,7 +14,7 @@ MODEL_COSTS = {
         "input": 0.15,
         "output": 0.60,
     },
-    "gpt-5.6-luna": {
+    "gpt-5.4-nano": {
         "input": 0.15,
         "output": 0.60,
     },
@@ -49,7 +49,7 @@ class LLMCallTracker:
     def increment(
         self,
         operation: str = "api_call",
-        model: str = "gpt-5.6-luna",
+        model: str = "gpt-5.4-nano",
         input_tokens: int = 0,
         output_tokens: int = 0,
     ):
@@ -149,7 +149,7 @@ def reset_tracker():
 
 def increment_llm_calls(
     operation: str = "api_call",
-    model: str = "gpt-5.6-luna",
+    model: str = "gpt-5.4-nano",
     input_tokens: int = 0,
     output_tokens: int = 0,
 ):

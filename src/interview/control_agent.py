@@ -98,7 +98,7 @@ Assess the quality of this answer."""
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-5.6-luna",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -177,7 +177,7 @@ What should we do next?"""
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-5.6-luna",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -298,7 +298,7 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-5.6-luna",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "user", "content": prompt},
                 ],

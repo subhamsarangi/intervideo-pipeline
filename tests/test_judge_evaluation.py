@@ -30,7 +30,7 @@ def test_save_question(db_path):
         "source_type": "project",
         "source_id": "proj_123",
         "difficulty": 4,
-        "gen_model": "gpt-5.6-luna",
+        "gen_model": "gpt-5.4-nano",
     }
     
     judge_scores = {
@@ -208,49 +208,51 @@ def test_judge_scores_pydantic():
         relevance=0.85,
         difficulty_match=0.88,
         groundedness=0.92,
+        interview_value=0.90,
         redundancy=0.95,
     )
     
     assert scores.clarity == 0.9
     assert scores.redundancy == 0.95
+    assert scores.interview_value == 0.90
     
     # Test bounds
     with pytest.raises(ValueError):
-        JudgeScores(clarity=1.5, relevance=0.8, difficulty_match=0.8, groundedness=0.8, redundancy=0.8)
+        JudgeScores(clarity=1.5, relevance=0.8, difficulty_match=0.8, groundedness=0.8, interview_value=0.8, redundancy=0.8)
 
 
 def test_question_score_pydantic():
     """Test QuestionScore validation"""
     score = QuestionScore(
+        question_index=1,
         question_text="What is your experience?",
         scores=JudgeScores(
             clarity=0.85,
             relevance=0.90,
             difficulty_match=0.80,
             groundedness=0.88,
+            interview_value=0.85,
             redundancy=0.85,
         ),
-        overall_score=0.86,
-        pass_threshold=True,
         feedback="Good question",
         rejection_reason=None,
     )
     
     assert score.pass_threshold == True
-    assert score.overall_score == 0.86
+    assert score.overall_score == 0.87  # Updated from 0.86 due to interview_value weights
     
     # Test below threshold
     score_rejected = QuestionScore(
+        question_index=2,
         question_text="Bad question",
         scores=JudgeScores(
             clarity=0.5,
             relevance=0.3,
             difficulty_match=0.4,
             groundedness=0.4,
+            interview_value=0.3,
             redundancy=0.5,
         ),
-        overall_score=0.42,
-        pass_threshold=False,
         feedback="Too generic",
         rejection_reason="Low relevance",
     )
@@ -297,39 +299,50 @@ async def test_judge_evaluation_node_mock(db_path):
         "db_path": db_path,
     }
     
-    # Mock the async OpenAI client
-    mock_response = MagicMock()
-    mock_response.question_scores = [
-        QuestionScore(
-            question_text="Describe your experience with REST APIs",
-            scores=JudgeScores(
-                clarity=0.9, relevance=0.95, difficulty_match=0.88,
-                groundedness=0.90, redundancy=0.85
-            ),
-            overall_score=0.90,
-            pass_threshold=True,
-            feedback="Excellent technical question",
-            rejection_reason=None,
-        ),
-        QuestionScore(
-            question_text="What is your favorite book?",
-            scores=JudgeScores(
-                clarity=0.7, relevance=0.2, difficulty_match=0.5,
-                groundedness=0.3, redundancy=0.6
-            ),
-            overall_score=0.35,
-            pass_threshold=False,
-            feedback="Not relevant to role",
-            rejection_reason="Low relevance",
-        ),
-    ]
-    mock_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+    # Mock response model
+    class MockJudgeResponse:
+        def __init__(self):
+            self.question_scores = [
+                QuestionScore(
+                    question_index=1,
+                    question_text="Describe your experience with REST APIs",
+                    feedback="Excellent technical question",
+                    scores=JudgeScores(
+                        clarity=0.9, relevance=0.95, difficulty_match=0.88,
+                        groundedness=0.90, interview_value=0.92, redundancy=0.85
+                    ),
+                    rejection_reason=None,
+                ),
+                QuestionScore(
+                    question_index=2,
+                    question_text="What is your favorite book?",
+                    feedback="Not relevant to role",
+                    scores=JudgeScores(
+                        clarity=0.7, relevance=0.2, difficulty_match=0.5,
+                        groundedness=0.3, interview_value=0.2, redundancy=0.6
+                    ),
+                    rejection_reason="Low relevance",
+                ),
+            ]
     
-    with patch("src.pipeline.nodes.judge_evaluation.get_async_openai_client") as mock_client:
-        mock_instructor_client = AsyncMock()
-        mock_instructor_client.chat.completions.create.return_value = mock_response
+    # Mock completion object with usage
+    mock_completion = MagicMock()
+    mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+    
+    # Mock the async OpenAI client
+    mock_client = AsyncMock()
+    mock_response = MockJudgeResponse()
+    
+    # create_with_completion returns (model, completion)
+    mock_client.chat.completions.create_with_completion = AsyncMock(
+        return_value=(mock_response, mock_completion)
+    )
+    
+    with patch("src.pipeline.nodes.judge_evaluation.get_async_openai_client") as mock_get_client:
+        mock_get_client.return_value = mock_client
         
-        with patch("src.pipeline.nodes.judge_evaluation.instructor.from_openai", return_value=mock_instructor_client):
+        with patch("src.pipeline.nodes.judge_evaluation.instructor.from_openai") as mock_instructor:
+            mock_instructor.return_value = mock_client
             result = await judge_evaluation_node(state)
     
     assert result["status"] == "running"

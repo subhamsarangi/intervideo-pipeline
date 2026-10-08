@@ -234,14 +234,13 @@ async def evaluate_questions_live():
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-5.6-luna",
+            model="gpt-5.4-nano",
             messages=[
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
             response_model=JudgeResponseModel,
-            temperature=0.3,
-            reasoning_effort= 'none'
+            temperature=0.3
         )
 
         print(f"   ✅ Judge completed")
