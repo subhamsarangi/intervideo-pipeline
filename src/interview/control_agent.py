@@ -7,7 +7,8 @@ Decides interview flow:
 - When to skip or stop interview
 - Detects fatigue and time pressure
 
-Uses GPT-4 for lightweight decision-making on answer quality + session state.
+Uses GPT-4o-mini for lightweight decision-making on answer quality + session state.
+Persists session state, answers, and decisions to database.
 """
 
 import os
@@ -27,6 +28,13 @@ from src.models.interview_agent import (
     AgentDecision,
     DecisionReason,
     InterviewMetrics,
+)
+from src.database.interview_db import (
+    create_interview_session,
+    update_interview_session,
+    save_interview_answer,
+    save_interview_decision,
+    get_session_metrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,10 +59,11 @@ class NextDecision(BaseModel):
 class InterviewControlAgent:
     """Controls interview flow based on answers and session state"""
     
-    def __init__(self):
-        """Initialize agent with OpenAI client"""
+    def __init__(self, db_path: Optional[str] = None):
+        """Initialize agent with OpenAI client and optional DB path"""
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.client = instructor.from_openai(self.client)
+        self.db_path = db_path
         
         logger.info("Interview Control Agent initialized")
     
@@ -125,6 +134,7 @@ Assess the quality of this answer."""
         last_answer_quality: AnswerQuality,
         last_answer_text: str,
         question_asked: str,
+        last_answer_id: int,
     ) -> AgentDecision:
         """
         Decide what to do next (continue, probe, skip, exit).
@@ -134,6 +144,7 @@ Assess the quality of this answer."""
             last_answer_quality: Quality of last answer
             last_answer_text: Text of last answer
             question_asked: Text of question just answered
+            last_answer_id: DB ID of last answer record
         
         Returns:
             Decision on next action
@@ -194,7 +205,18 @@ What should we do next?"""
                 based_on_answer=last_answer_text[:100],
             )
             
-            logger.info(f"Next action decided: {decision.action.value} (confidence: {decision.confidence:.2f})")
+            # Save to database
+            save_interview_decision(
+                session_id=session_state.session_id,
+                answer_id=last_answer_id,
+                action=decision.action.value,
+                follow_up=decision.follow_up,
+                reasoning=decision.reasoning,
+                confidence=decision.confidence,
+                db_path=self.db_path,
+            )
+            
+            logger.info(f"Next action decided: {decision.action.value} (confidence: {decision.confidence:.2f}), saved to DB")
             return decision
             
         except Exception as e:
@@ -240,14 +262,15 @@ What should we do next?"""
         )
         
         # Create record
+        now = datetime.now()
         record = AnswerRecord(
             question_id=question_id,
             question_text=question_text,
             question_level=question_level,
             question_type=question_type,
-            asked_at=datetime.now(),
+            asked_at=now,
             answer_text=answer_text,
-            answered_at=datetime.now(),
+            answered_at=now,
             duration_seconds=duration_seconds,
             quality=quality_assessment.quality,
             feedback=quality_assessment.reasoning,
@@ -268,7 +291,23 @@ What should we do next?"""
         scores = [quality_scores[a.quality] for a in session_state.answers]
         session_state.avg_answer_quality = sum(scores) / len(scores) if scores else 0.5
         
-        logger.info(f"Answer recorded: {record.quality.value} (avg quality: {session_state.avg_answer_quality:.2f})")
+        # Save to database
+        answer_id = save_interview_answer(
+            session_id=session_state.session_id,
+            question_id=question_id,
+            question_text=question_text,
+            question_level=question_level,
+            question_type=question_type,
+            asked_at=now,
+            answer_text=answer_text,
+            answered_at=now,
+            duration_seconds=duration_seconds,
+            quality=quality_assessment.quality.value,
+            feedback=quality_assessment.reasoning,
+            db_path=self.db_path,
+        )
+        
+        logger.info(f"Answer recorded: {record.quality.value} (avg quality: {session_state.avg_answer_quality:.2f}), saved to DB id={answer_id}")
         
         return record
     
@@ -373,6 +412,20 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
         last_3 = session_state.answers[-3:] if len(session_state.answers) >= 3 else session_state.answers
         poor_answers = len([a for a in last_3 if a.quality in [AnswerQuality.POOR, AnswerQuality.OFF_TOPIC]])
         fatigue = poor_answers >= 2
+        
+        # Update session in DB
+        update_interview_session(
+            session_id=session_state.session_id,
+            end_time=session_state.end_time,
+            total_duration_seconds=session_state.total_duration_seconds,
+            avg_answer_quality=session_state.avg_answer_quality,
+            fatigue_detected=fatigue,
+            exit_reason=session_state.exit_reason.value if session_state.exit_reason else "ALL_ASKED",
+            is_active=False,
+            db_path=self.db_path,
+        )
+        
+        logger.info(f"Interview summary saved to DB: {session_state.total_duration_seconds}s, fatigue={fatigue}")
         
         return InterviewMetrics(
             total_questions=session_state.total_questions,

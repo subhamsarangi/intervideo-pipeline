@@ -125,6 +125,60 @@ CREATE TABLE IF NOT EXISTS run_summaries (
     FOREIGN KEY (run_id) REFERENCES pipeline_runs(id)
 );
 
+-- Interview Sessions (Phase 11b)
+CREATE TABLE IF NOT EXISTS interview_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL UNIQUE,
+    run_id INTEGER NOT NULL,
+    total_questions INTEGER NOT NULL,
+    planned_duration_seconds INTEGER NOT NULL,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    total_duration_seconds INTEGER,
+    avg_answer_quality REAL,
+    fatigue_detected INTEGER DEFAULT 0,
+    exit_reason TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES pipeline_runs(id)
+);
+
+-- Interview Answers (Phase 11b)
+CREATE TABLE IF NOT EXISTS interview_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    question_id INTEGER NOT NULL,
+    question_text TEXT NOT NULL,
+    question_level TEXT CHECK(question_level IN ('junior', 'mid', 'senior')),
+    question_type TEXT CHECK(question_type IN ('behavioral', 'technical', 'design', 'situational')),
+    asked_at TIMESTAMP,
+    answer_text TEXT NOT NULL,
+    answered_at TIMESTAMP,
+    duration_seconds INTEGER,
+    quality TEXT CHECK(quality IN ('excellent', 'good', 'fair', 'poor', 'off_topic')),
+    feedback TEXT,
+    follow_ups_asked INTEGER DEFAULT 0,
+    follow_up_texts JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id),
+    FOREIGN KEY (question_id) REFERENCES questions(id)
+);
+
+-- Interview Decisions (Phase 11b)
+CREATE TABLE IF NOT EXISTS interview_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    answer_id INTEGER NOT NULL,
+    action TEXT CHECK(action IN ('continue_normal', 'probe_deeper', 'skip_question', 'time_limit', 'fatigue', 'all_asked', 'candidate_exit')),
+    follow_up TEXT,
+    reasoning TEXT,
+    confidence REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id),
+    FOREIGN KEY (answer_id) REFERENCES interview_answers(id)
+);
+
 -- LangGraph Checkpoints (handled by SqliteSaver, but keep schema for reference)
 CREATE TABLE IF NOT EXISTS checkpoint (
     thread_id TEXT NOT NULL,
@@ -155,3 +209,6 @@ CREATE INDEX IF NOT EXISTS idx_steps_run ON pipeline_steps(run_id);
 CREATE INDEX IF NOT EXISTS idx_steps_status ON pipeline_steps(status);
 CREATE INDEX IF NOT EXISTS idx_questions_run ON questions(run_id);
 CREATE INDEX IF NOT EXISTS idx_fitness_run ON fitness_scores(run_id);
+CREATE INDEX IF NOT EXISTS idx_interview_session ON interview_sessions(run_id);
+CREATE INDEX IF NOT EXISTS idx_interview_answers ON interview_answers(session_id);
+CREATE INDEX IF NOT EXISTS idx_interview_decisions ON interview_decisions(session_id);
