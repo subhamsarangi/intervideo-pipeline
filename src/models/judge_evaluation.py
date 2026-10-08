@@ -6,13 +6,15 @@ from enum import Enum
 
 
 # Single source of truth for scoring. `redundancy` is reported but not weighted.
+# Mock interview weights: relevance (role fit) + groundedness (CV/JD match) + interview_value (role-level fit) prioritized
 WEIGHTS: Dict[str, float] = {
-    "clarity": 0.30,
-    "relevance": 0.35,
-    "difficulty_match": 0.20,
-    "groundedness": 0.15,
+    "clarity": 0.20,
+    "relevance": 0.30,
+    "difficulty_match": 0.10,
+    "groundedness": 0.20,
+    "interview_value": 0.20,
 }
-PASS_THRESHOLD = 0.65
+PASS_THRESHOLD = 0.70
 
 
 class QuestionStatus(str, Enum):
@@ -29,6 +31,7 @@ class JudgeScores(BaseModel):
     relevance: float = Field(..., ge=0, le=1, description="How relevant to role (0-1)")
     difficulty_match: float = Field(..., ge=0, le=1, description="Matches the question's level tag (0-1)")
     groundedness: float = Field(..., ge=0, le=1, description="Grounded in CV/JD (0-1)")
+    interview_value: float = Field(..., ge=0, le=1, description="Tests at appropriate depth for role seniority (0-1)")
     redundancy: float = Field(..., ge=0, le=1, description="Uniqueness vs other questions in batch (0-1)")
 
     def weighted_overall(self) -> float:

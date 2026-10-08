@@ -88,6 +88,116 @@ async def evaluate_questions_live():
             "source_type": "project",
             "source_id": "proj_migration",
         },
+        {
+            "question_text": "Implement a rate limiter using Redis. How do you handle edge cases like clock skew?",
+            "level": "senior",
+            "skill_required": "Backend Engineering",
+            "question_type": "technical",
+            "key_points": ["Token bucket vs sliding window", "Redis atomic operations", "Clock synchronization"],
+            "follow_ups": ["What's your strategy for distributed rate limiting?"],
+            "source_type": "project",
+            "source_id": "proj_ratelimit",
+        },
+        {
+            "question_text": "What is a closure in Python? Give an example.",
+            "level": "junior",
+            "skill_required": "Python",
+            "question_type": "technical",
+            "key_points": ["Nested functions", "Variable scope", "Practical use cases"],
+            "follow_ups": ["When would you use a closure instead of a class?"],
+            "source_type": "skill",
+            "source_id": "skill_python",
+        },
+        {
+            "question_text": "Describe a time when you had to make a technical decision with incomplete information.",
+            "level": "mid",
+            "skill_required": "Decision Making",
+            "question_type": "behavioral",
+            "key_points": ["Risk assessment", "Trade-off analysis", "Communication with stakeholders"],
+            "follow_ups": ["How did you validate your decision afterward?"],
+            "source_type": "project",
+            "source_id": "proj_decision",
+        },
+        {
+            "question_text": "Design a URL shortener service. How would you handle collisions?",
+            "level": "mid",
+            "skill_required": "System Design",
+            "question_type": "design",
+            "key_points": ["Hash functions", "Database schema", "Collision resolution strategies"],
+            "follow_ups": ["How do you scale reads vs writes?"],
+            "source_type": "project",
+            "source_id": "proj_urlshort",
+        },
+        {
+            "question_text": "Explain the CAP theorem and give a real-world example.",
+            "level": "senior",
+            "skill_required": "Distributed Systems",
+            "question_type": "technical",
+            "key_points": ["Consistency", "Availability", "Partition tolerance", "Trade-offs"],
+            "follow_ups": ["Which would you sacrifice for your previous project and why?"],
+            "source_type": "skill",
+            "source_id": "skill_distrib",
+        },
+        {
+            "question_text": "How do you ensure code quality in a fast-paced startup environment?",
+            "level": "mid",
+            "skill_required": "Software Engineering",
+            "question_type": "behavioral",
+            "key_points": ["Testing strategies", "Code review process", "Technical debt management"],
+            "follow_ups": ["Give an example of when you pushed back on a feature to maintain quality."],
+            "source_type": "project",
+            "source_id": "proj_quality",
+        },
+        {
+            "question_text": "What are the benefits of agile methodology?",
+            "level": "junior",
+            "skill_required": "General",
+            "question_type": "behavioral",
+            "key_points": ["Iterative development", "Team collaboration"],
+            "follow_ups": [],
+            "source_type": "skill",
+            "source_id": "skill_gen",
+        },
+        {
+            "question_text": "Explain the difference between SQL and NoSQL databases.",
+            "level": "junior",
+            "skill_required": "Databases",
+            "question_type": "technical",
+            "key_points": ["Schema", "ACID vs BASE", "Use cases"],
+            "follow_ups": ["When would you choose one over the other?"],
+            "source_type": "skill",
+            "source_id": "skill_db",
+        },
+        {
+            "question_text": "Tell me about yourself.",
+            "level": "junior",
+            "skill_required": "General",
+            "question_type": "behavioral",
+            "key_points": ["Background", "Experience"],
+            "follow_ups": [],
+            "source_type": "skill",
+            "source_id": "skill_intro",
+        },
+        {
+            "question_text": "Design a system that can handle 1 billion requests per day with 99.99% uptime using best practices and modern architecture patterns.",
+            "level": "senior",
+            "skill_required": "System Architecture",
+            "question_type": "design",
+            "key_points": ["Scalability", "Reliability", "Architecture"],
+            "follow_ups": [],
+            "source_type": "project",
+            "source_id": "proj_complex",
+        },
+        {
+            "question_text": "How would you optimize database queries?",
+            "level": "mid",
+            "skill_required": "Backend Performance",
+            "question_type": "technical",
+            "key_points": ["Indexing", "Query optimization"],
+            "follow_ups": ["What tools do you use?"],
+            "source_type": "project",
+            "source_id": "proj_dbperf",
+        },
     ]
 
     # JD context
@@ -163,6 +273,7 @@ async def evaluate_questions_live():
                 "relevance": score_obj.scores.relevance,
                 "difficulty_match": score_obj.scores.difficulty_match,
                 "groundedness": score_obj.scores.groundedness,
+                "interview_value": score_obj.scores.interview_value,
                 "redundancy": score_obj.scores.redundancy,
                 "overall": score_obj.overall_score,
             }
@@ -207,12 +318,13 @@ async def evaluate_questions_live():
             print(f"   " + print_score_bar(score_obj.scores.relevance, "Relevance"))
             print(f"   " + print_score_bar(score_obj.scores.difficulty_match, "Difficulty Match"))
             print(f"   " + print_score_bar(score_obj.scores.groundedness, "Groundedness"))
+            print(f"   " + print_score_bar(score_obj.scores.interview_value, "Interview Value"))
             print(f"   " + print_score_bar(score_obj.scores.redundancy, "Redundancy"))
             print(f"   " + "=" * 76)
             print(f"   " + print_score_bar(score_obj.overall_score, "OVERALL"))
 
             print(f"   Feedback: {score_obj.feedback}")
-            if score_obj.rejection_reason:
+            if not score_obj.pass_threshold and score_obj.rejection_reason:
                 print(f"   ⚠️  Rejection: {score_obj.rejection_reason}")
 
         # Show database queries

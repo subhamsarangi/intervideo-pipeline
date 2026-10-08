@@ -41,6 +41,12 @@ Without a CV: judge against the JD only; do NOT penalize the missing CV.
 0.40-0.59  Generic question that could be asked of anyone
 0.00-0.39  Contradicts the CV/JD or is off-base
 
+### interview_value: does it test at the right depth for the ROLE seniority (not question tag)?
+Penalize questions below role level (junior Qs for senior role). Ignore if above role (senior Q for junior role = fine).
+For SENIOR role: junior Qs = 0.20-0.40, mid Qs = 0.60-0.75, senior Qs = 0.90-1.00
+For MID role: junior Qs = 0.50-0.70, mid Qs = 0.90-1.00, senior Qs = 0.90-1.00
+For JUNIOR role: all levels = 0.80-1.00 (any Q tests something)
+
 ### redundancy: uniqueness within this batch
 1.00 = covers a distinct topic; 0.50 = partial overlap with another question; 0.00 = near-duplicate.
 
