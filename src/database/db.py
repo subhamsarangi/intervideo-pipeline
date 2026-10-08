@@ -566,3 +566,139 @@ def display_cost_report(db_path: Optional[str] = None):
 
     if cv_avg["document_count"] == 0 and jd_avg["document_count"] == 0:
         print("No parsing cost data available yet.")
+
+
+# Questions
+def save_question(
+    run_id: int,
+    question_data: Dict[str, Any],
+    judge_scores: Optional[Dict[str, float]] = None,
+    judge_feedback: Optional[str] = None,
+    judge_pass: Optional[bool] = None,
+    status: str = "candidate",
+    db_path: Optional[str] = None,
+) -> int:
+    """
+    Save a single question with optional judge scores and status.
+    
+    Args:
+        run_id: Pipeline run ID
+        question_data: Dict with question_text, level, skill_required, question_type, etc.
+        judge_scores: Dict with clarity, relevance, difficulty_match, groundedness, overall, redundancy
+        judge_feedback: Feedback from judge
+        judge_pass: Whether question passed judge threshold
+        status: Question status (rejected_auto, candidate, verified, rejected_human)
+        db_path: Database path
+    
+    Returns:
+        Question ID
+    """
+    import hashlib
+    
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        
+        question_text = question_data.get("question_text", "")
+        question_hash = hashlib.sha256(question_text.encode()).hexdigest()
+        
+        cursor.execute(
+            """INSERT INTO questions (
+                run_id, source_type, source_ref, question_text, question_hash,
+                level, difficulty, skill, question_type, key_points, follow_ups,
+                gen_model, prompt_version,
+                judge_clarity_score, judge_relevance_score, judge_difficulty_match_score,
+                judge_groundedness_score, judge_redundancy_score, judge_overall_score,
+                judge_pass, judge_feedback, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id,
+                question_data.get("source_type", "project"),
+                question_data.get("source_id"),
+                question_text,
+                question_hash,
+                question_data.get("level"),
+                question_data.get("difficulty"),
+                question_data.get("skill_required"),
+                question_data.get("question_type"),
+                json.dumps(question_data.get("key_points", [])),
+                json.dumps(question_data.get("follow_ups", [])),
+                question_data.get("gen_model", "gpt-5.4-nano"),
+                question_data.get("prompt_version"),
+                judge_scores.get("clarity") if judge_scores else None,
+                judge_scores.get("relevance") if judge_scores else None,
+                judge_scores.get("difficulty_match") if judge_scores else None,
+                judge_scores.get("groundedness") if judge_scores else None,
+                judge_scores.get("redundancy") if judge_scores else None,
+                judge_scores.get("overall") if judge_scores else None,
+                judge_pass,
+                json.dumps({"feedback": judge_feedback}) if judge_feedback else None,
+                status,
+            ),
+        )
+        return cursor.lastrowid
+
+
+def get_question(question_id: int, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get question by ID"""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
+        row = cursor.fetchone()
+        if row:
+            result = dict(row)
+            # Parse JSON fields
+            if result.get("key_points"):
+                result["key_points"] = json.loads(result["key_points"])
+            if result.get("follow_ups"):
+                result["follow_ups"] = json.loads(result["follow_ups"])
+            if result.get("judge_feedback"):
+                result["judge_feedback"] = json.loads(result["judge_feedback"])
+            return result
+        return None
+
+
+def list_questions_by_run(
+    run_id: int,
+    status: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """List questions for a pipeline run, optionally filtered by status"""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        if status:
+            cursor.execute(
+                "SELECT * FROM questions WHERE run_id = ? AND status = ? ORDER BY created_at",
+                (run_id, status),
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM questions WHERE run_id = ? ORDER BY created_at",
+                (run_id,),
+            )
+        rows = cursor.fetchall()
+        results = []
+        for row in rows:
+            result = dict(row)
+            if result.get("key_points"):
+                result["key_points"] = json.loads(result["key_points"])
+            if result.get("follow_ups"):
+                result["follow_ups"] = json.loads(result["follow_ups"])
+            if result.get("judge_feedback"):
+                result["judge_feedback"] = json.loads(result["judge_feedback"])
+            results.append(result)
+        return results
+
+
+def update_question_status(
+    question_id: int,
+    status: str,
+    review_note: Optional[str] = None,
+    db_path: Optional[str] = None,
+) -> None:
+    """Update question status (e.g., candidate → verified or rejected_human)"""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE questions SET status = ?, review_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (status, review_note, question_id),
+        )

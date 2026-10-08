@@ -67,18 +67,39 @@ CREATE TABLE IF NOT EXISTS pipeline_steps (
 -- Generated Questions
 CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id INTEGER NOT NULL,
-    source_type TEXT CHECK(source_type IN ('project', 'skill')),
-    source_id TEXT,
+    run_id INTEGER NOT NULL REFERENCES pipeline_runs(id),
+    source_type TEXT NOT NULL CHECK(source_type IN ('project','skill')),
+    source_ref TEXT,
     question_text TEXT NOT NULL,
+    question_hash TEXT NOT NULL UNIQUE,
     evidence_snippet TEXT,
     evidence_span JSON,
-    judge_relevance_score REAL,
-    judge_groundedness_score REAL,
-    judge_redundancy_score REAL,
+    level TEXT CHECK(level IN ('junior','mid','senior')),
+    difficulty INTEGER CHECK(difficulty BETWEEN 1 AND 5),
+    skill TEXT,
+    question_type TEXT CHECK(question_type IN ('behavioral','technical','design','situational')),
+    key_points JSON,
+    follow_ups JSON,
+    gen_model TEXT,
+    prompt_version TEXT,
+    judge_version TEXT,
+    judge_clarity_score REAL CHECK(judge_clarity_score BETWEEN 0 AND 1),
+    judge_relevance_score REAL CHECK(judge_relevance_score BETWEEN 0 AND 1),
+    judge_difficulty_match_score REAL CHECK(judge_difficulty_match_score BETWEEN 0 AND 1),
+    judge_groundedness_score REAL CHECK(judge_groundedness_score BETWEEN 0 AND 1),
+    judge_redundancy_score REAL CHECK(judge_redundancy_score BETWEEN 0 AND 1),
+    judge_overall_score REAL,
+    judge_pass INTEGER,
+    judge_feedback JSON,
+    status TEXT NOT NULL DEFAULT 'candidate'
+        CHECK(status IN ('rejected_auto','candidate','verified','rejected_human')),
+    review_note TEXT,
+    langsmith_run_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (run_id) REFERENCES pipeline_runs(id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_q_status ON questions(status, skill, level);
+CREATE INDEX IF NOT EXISTS idx_q_run ON questions(run_id);
 
 -- Fitness Scores
 CREATE TABLE IF NOT EXISTS fitness_scores (
