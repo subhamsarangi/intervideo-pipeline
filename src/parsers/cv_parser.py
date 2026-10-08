@@ -93,7 +93,7 @@ def extract_cv_structure(raw_text: str) -> ParsedCV:
         work_experiences: List[WorkExperience] = Field(default_factory=list)
 
     response = client.chat.completions.create(
-        model="gpt-5.4-nano",
+        model="gpt-5.6-luna",
         response_model=Phase1Data,
         messages=[
             {
@@ -128,7 +128,7 @@ For each work experience:
             projects: List[CVProject] = Field(default_factory=list)
 
         response = client.chat.completions.create(
-            model="gpt-5.4-nano",
+            model="gpt-5.6-luna",
             response_model=ProjectsFromExp,
             messages=[
                 {
@@ -189,7 +189,7 @@ If no explicit projects are mentioned, create ONE project from the overall role 
         skills: List[CVSkill] = Field(default_factory=list)
 
     response = client.chat.completions.create(
-        model="gpt-5.4-nano",
+        model="gpt-5.6-luna",
         response_model=Phase3Data,
         messages=[
             {
@@ -268,7 +268,7 @@ def deduplicate_projects(projects: List[CVProject], client) -> List[CVProject]:
     )
 
     response = client.chat.completions.create(
-        model="gpt-5.4-nano",
+        model="gpt-5.6-luna",
         response_model=DeduplicationResult,
         messages=[
             {

@@ -64,7 +64,7 @@ class LiveQuestionGenerator:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-5.4-nano",
+                model="gpt-5.6-luna",
                 temperature=0.7,
                 max_retries=2,
                 messages=[
@@ -77,7 +77,7 @@ class LiveQuestionGenerator:
             # Track tokens
             if hasattr(response, "usage"):
                 self.total_tokens += response.usage.prompt_tokens + response.usage.completion_tokens
-                # Approximate cost (gpt-5.4-nano: ~$0.00015/1K input, $0.0006/1K output)
+                # Approximate cost (gpt-5.6-luna: ~$0.00015/1K input, $0.0006/1K output)
                 self.total_cost += (
                     response.usage.prompt_tokens * 0.00015 / 1000
                     + response.usage.completion_tokens * 0.0006 / 1000
@@ -116,7 +116,7 @@ class LiveQuestionGenerator:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-5.4-nano",
+                model="gpt-5.6-luna",
                 temperature=0.7,
                 max_retries=2,
                 messages=[

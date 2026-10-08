@@ -622,7 +622,7 @@ def save_question(
                 question_data.get("question_type"),
                 json.dumps(question_data.get("key_points", [])),
                 json.dumps(question_data.get("follow_ups", [])),
-                question_data.get("gen_model", "gpt-5.4-nano"),
+                question_data.get("gen_model", "gpt-5.6-luna"),
                 question_data.get("prompt_version"),
                 judge_scores.get("clarity") if judge_scores else None,
                 judge_scores.get("relevance") if judge_scores else None,

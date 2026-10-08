@@ -30,7 +30,7 @@ def test_save_question(db_path):
         "source_type": "project",
         "source_id": "proj_123",
         "difficulty": 4,
-        "gen_model": "gpt-5.4-nano",
+        "gen_model": "gpt-5.6-luna",
     }
     
     judge_scores = {

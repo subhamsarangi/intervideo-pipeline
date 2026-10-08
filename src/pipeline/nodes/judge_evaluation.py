@@ -18,7 +18,7 @@ from src.utils.embeddings import get_async_openai_client
 from src.utils.judge_prompts import JUDGE_SYSTEM_PROMPT, get_judge_user_prompt
 from src.utils.llm_tracking import increment_llm_calls
 
-JUDGE_MODEL = "gpt-5.4-nano"
+JUDGE_MODEL = "gpt-5.6-luna"
 BATCH_SIZE = 10
 MAX_ATTEMPTS = 2  # initial call + 1 retry if scores are missing
 

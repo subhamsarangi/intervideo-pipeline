@@ -104,7 +104,7 @@ async def skill_questions_node(
             try:
                 # Call with Instructor for structured output
                 response = await client.chat.completions.create(
-                    model="gpt-5.4-nano",
+                    model="gpt-5.6-luna",
                     messages=[
                         {"role": "system", "content": SKILL_QUESTIONS_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
@@ -118,7 +118,7 @@ async def skill_questions_node(
                 if hasattr(response, "usage") and response.usage:
                     increment_llm_calls(
                         operation="skill_questions_generation",
-                        model="gpt-5.4-nano",
+                        model="gpt-5.6-luna",
                         input_tokens=response.usage.prompt_tokens,
                         output_tokens=response.usage.completion_tokens,
                     )

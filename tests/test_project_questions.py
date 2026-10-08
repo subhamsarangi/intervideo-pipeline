@@ -232,7 +232,7 @@ class TestProjectQuestionsNode:
         assert mock_track.call_count == 2
         for call in mock_track.call_args_list:
             assert call.kwargs["operation"] == "project_questions_generation"
-            assert call.kwargs["model"] == "gpt-5.4-nano"
+            assert call.kwargs["model"] == "gpt-5.6-luna"
             assert call.kwargs["input_tokens"] == 200
             assert call.kwargs["output_tokens"] == 100
 
