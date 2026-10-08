@@ -1,19 +1,18 @@
 """
-Demo: Interview Control Agent with Database Persistence
+Demo: Autonomous Interview Agent (Phase 11b)
 
-Shows agent making decisions on:
-- Answer quality assessment  
-- Follow-up generation
-- Interview pacing (continue/probe/skip/exit)
-- Session summary metrics
-- Persistent storage to database
+Shows agent running full interview end-to-end without caller orchestration.
+Agent has:
+- Tools: get_next_question(), skip_question()
+- Loop: run_interview() with assess → decide → act cycle
+- Autonomy: manages flow, decisions, DB saves
+- Memory: tracks questions, decisions, metrics
 """
 
 import asyncio
 import sys
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
@@ -22,11 +21,7 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.interview.control_agent import InterviewControlAgent
-from src.models.interview_agent import (
-    InterviewSessionState,
-    AnswerQuality,
-    DecisionReason,
-)
+from src.models.interview_agent import InterviewSessionState, DecisionReason
 from src.database.db import init_db
 from src.database.interview_db import (
     create_interview_session,
@@ -37,6 +32,196 @@ from src.database.interview_db import (
     get_session_decision_breakdown,
     get_session_fatigue_signals,
 )
+
+
+def print_banner(text: str):
+    print("\n" + "=" * 100)
+    print(text.center(100))
+    print("=" * 100)
+
+
+def print_section(text: str):
+    print(f"\n{'─' * 100}")
+    print(f"▶ {text}")
+    print(f"{'─' * 100}")
+
+
+class MockAnswerProvider:
+    """Mock provider simulates candidate answers"""
+    
+    def __init__(self, answers: dict):
+        self.answers = answers
+        self.call_count = 0
+    
+    async def __call__(self, question_text: str) -> str:
+        # Return pre-recorded answer or generic fallback
+        for q_text, answer in self.answers.items():
+            if q_text[:50] in question_text[:50]:
+                return answer
+        return "I'm not sure about that."
+
+
+async def demo_autonomous():
+    """Run autonomous interview - agent handles everything"""
+    
+    print_banner("Autonomous Interview Agent Demo (Phase 11b)")
+    print("\n✨ Agent now has: Tools + Loop + Memory + Autonomy = Real Agent\n")
+    
+    # Setup
+    db_path = "demo_autonomous_interview.db"
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    init_db(db_path)
+    
+    print_section("Initialization")
+    
+    # Create agent with DB persistence
+    agent = InterviewControlAgent(db_path=db_path)
+    print("✅ Agent initialized with tools + loop")
+    
+    # Create session
+    session = InterviewSessionState(
+        session_id="autonomous_demo_001",
+        run_id=1,
+        total_questions=4,
+    )
+    print(f"✅ Session created: {session.session_id}")
+    
+    # Define questions for interview
+    questions = [
+        {
+            "id": 1,
+            "question_text": "Describe how you would design a distributed cache system.",
+            "question_level": "senior",
+            "question_type": "design",
+        },
+        {
+            "id": 2,
+            "question_text": "Tell me about a time you debugged a production issue.",
+            "question_level": "mid",
+            "question_type": "behavioral",
+        },
+        {
+            "id": 3,
+            "question_text": "What is a closure in Python?",
+            "question_level": "junior",
+            "question_type": "technical",
+        },
+        {
+            "id": 4,
+            "question_text": "Explain eventual consistency in distributed systems.",
+            "question_level": "senior",
+            "question_type": "design",
+        },
+    ]
+    
+    print(f"✅ Questions loaded: {len(questions)} questions")
+    
+    # Mock answers
+    answer_map = {
+        "Describe how you would design": "I'd use Redis with cluster mode for HA. Key decisions: eventual consistency for reads, LRU eviction, 2x replication for fault tolerance. Route writes to primary only. Monitor via Prometheus.",
+        "Tell me about a time": "Database was slow, we optimized queries with indexes and caching.",
+        "What is a closure": "Function inside function that accesses outer scope variables.",
+        "Explain eventual consistency": "System eventually becomes consistent after writes propagate. Used in distributed DBs like DynamoDB.",
+    }
+    
+    answer_provider = MockAnswerProvider(answer_map)
+    
+    print_section("Agent Autonomy")
+    print("🔧 Agent has these tools:")
+    print("   • get_next_question() - retrieves next Q from loaded list")
+    print("   • skip_question() - marks question as skipped")
+    print("   • load_questions() - loads Q bank into memory")
+    print("\n🔄 Agent has main loop:")
+    print("   • run_interview() - orchestrates full interview autonomously")
+    print("\n📊 Agent has decision-making:")
+    print("   • assess_answer_quality() - LLM judges answer")
+    print("   • decide_next_action() - LLM decides CONTINUE/PROBE/SKIP/EXIT")
+    print("   • generate_follow_up() - LLM generates follow-ups")
+    print("\n💾 Agent has memory:")
+    print("   • Tracks questions (self.questions)")
+    print("   • Tracks decisions (self.current_q_index)")
+    print("   • Persists to DB (sessions, answers, decisions)")
+    
+    print_section("Running Autonomous Interview")
+    print("\n🤖 Agent runs full interview WITHOUT caller orchestration...")
+    print("   (Caller just calls: agent.run_interview(session, questions, answer_provider))\n")
+    
+    # RUN INTERVIEW - This is all the caller needs to do!
+    metrics = await agent.run_interview(session, questions, answer_provider)
+    
+    print_section("Interview Complete!")
+    
+    print(f"\n📊 Results:")
+    print(f"   Questions asked: {metrics.questions_asked}/{metrics.total_questions}")
+    print(f"   Questions skipped: {metrics.questions_skipped}")
+    print(f"   Average quality: {metrics.avg_answer_quality:.2f}/1.0")
+    print(f"   Total time: {metrics.total_duration_minutes:.1f} minutes")
+    print(f"   Exit reason: {metrics.reason_for_exit.value}")
+    print(f"   Fatigue detected: {'Yes ⚠️' if metrics.fatigue_detected else 'No ✅'}")
+    
+    print(f"\n📈 Quality Distribution:")
+    for quality, count in metrics.quality_distribution.items():
+        if count > 0:
+            pct = (count / metrics.questions_asked) * 100 if metrics.questions_asked > 0 else 0
+            print(f"   {quality.value:12s}: {count} ({pct:.0f}%)")
+    
+    print(f"\n📚 Performance by Level:")
+    for level, perf in metrics.performance_by_level.items():
+        asked = metrics.questions_by_level.get(level, 0)
+        if asked > 0:
+            print(f"   {level.upper():8s}: {perf:.2f} ({asked} questions)")
+    
+    # Retrieve data from DB to show persistence
+    print_section("Database Persistence")
+    
+    answers = list_session_answers(session.session_id, db_path=db_path)
+    print(f"\n💾 Stored Answers: {len(answers)}")
+    for ans in answers:
+        print(f"   • [{ans['quality']:10s}] {ans['question_text'][:60]}...")
+    
+    decisions = list_session_decisions(session.session_id, db_path=db_path)
+    print(f"\n💾 Stored Decisions: {len(decisions)}")
+    for dec in decisions:
+        print(f"   • {dec['action']:20s} (confidence: {dec['confidence']:.0%})")
+    
+    print_section("Is It a Real Agent?")
+    
+    print("\n✅ YES - InterviewControlAgent is now a REAL AGENT:")
+    print("\n   1. TOOLS: get_next_question(), skip_question(), load_questions()")
+    print("      → Agent can invoke tools to interact with environment")
+    print("\n   2. LOOP: run_interview() async main loop")
+    print("      → Agent executes autonomously without caller orchestration")
+    print("\n   3. AUTONOMY: Manages flow, decisions, persistence end-to-end")
+    print("      → Agent makes all decisions (assess → decide → act)")
+    print("\n   4. MEMORY: Tracks state (questions, decisions, metrics)")
+    print("      → Agent persists to DB, learns from past decisions")
+    print("\n   5. DECISION-MAKING: LLM-based reasoning")
+    print("      → Agent uses gpt-5.4-nano for quality + next-action decisions")
+    
+    print_banner("Demo Complete!")
+    print("\n✨ Agent successfully:")
+    print("   ✓ Ran full interview autonomously")
+    print("   ✓ Used tools to retrieve questions")
+    print("   ✓ Made decisions (continue/probe/skip/exit)")
+    print("   ✓ Persisted session state to database")
+    print("   ✓ Generated final metrics")
+    print(f"\n💾 Database: {db_path}\n")
+    
+    # Cleanup
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(demo_autonomous())
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Demo interrupted")
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def print_banner(text: str):

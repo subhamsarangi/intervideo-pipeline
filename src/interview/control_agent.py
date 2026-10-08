@@ -7,14 +7,14 @@ Decides interview flow:
 - When to skip or stop interview
 - Detects fatigue and time pressure
 
-Uses GPT-4o-mini for lightweight decision-making on answer quality + session state.
+Uses gpt-5.4-nano for lightweight decision-making on answer quality + session state.
 Persists session state, answers, and decisions to database.
 """
 
 import os
 import asyncio
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Callable
 from datetime import datetime
 
 from openai import AsyncOpenAI
@@ -35,6 +35,7 @@ from src.database.interview_db import (
     save_interview_answer,
     save_interview_decision,
     get_session_metrics,
+    list_session_answers,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,8 +65,29 @@ class InterviewControlAgent:
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.client = instructor.from_openai(self.client)
         self.db_path = db_path
+        self.questions: List[Dict] = []
+        self.current_q_index = 0
         
         logger.info("Interview Control Agent initialized")
+    
+    def get_next_question(self) -> Optional[Dict]:
+        """Tool: retrieve next question from loaded list"""
+        if self.current_q_index < len(self.questions):
+            q = self.questions[self.current_q_index]
+            self.current_q_index += 1
+            logger.info(f"Retrieved question {self.current_q_index}/{len(self.questions)}")
+            return q
+        return None
+    
+    def skip_question(self) -> None:
+        """Tool: skip current question without recording answer"""
+        logger.info(f"Skipped question {self.current_q_index}")
+    
+    def load_questions(self, questions: List[Dict]) -> None:
+        """Load interview questions into agent"""
+        self.questions = questions
+        self.current_q_index = 0
+        logger.info(f"Loaded {len(questions)} questions")
     
     async def assess_answer_quality(
         self,
@@ -107,7 +129,7 @@ Assess the quality of this answer."""
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.4-nano",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -188,7 +210,7 @@ What should we do next?"""
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.4-nano",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -337,7 +359,7 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.4-nano",
                 messages=[
                     {"role": "user", "content": prompt},
                 ],
@@ -388,6 +410,20 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
             count = len([a for a in session_state.answers if a.quality == q])
             quality_dist[q] = count
         
+        # Best/worst answers
+        best_answer = None
+        worst_answer = None
+        if session_state.answers:
+            quality_scores = {
+                AnswerQuality.EXCELLENT: 5,
+                AnswerQuality.GOOD: 4,
+                AnswerQuality.FAIR: 3,
+                AnswerQuality.POOR: 2,
+                AnswerQuality.OFF_TOPIC: 1,
+            }
+            best_answer = max(session_state.answers, key=lambda a: quality_scores.get(a.quality, 0)).quality
+            worst_answer = min(session_state.answers, key=lambda a: quality_scores.get(a.quality, 0)).quality
+        
         # By level
         questions_by_level = {}
         performance_by_level = {}
@@ -413,6 +449,16 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
         poor_answers = len([a for a in last_3 if a.quality in [AnswerQuality.POOR, AnswerQuality.OFF_TOPIC]])
         fatigue = poor_answers >= 2
         
+        # Average time per question
+        avg_question_duration = (
+            session_state.total_duration_seconds / session_state.questions_asked
+            if session_state.questions_asked > 0
+            else 0
+        )
+        
+        # Total duration in minutes
+        total_duration_minutes = session_state.total_duration_seconds / 60.0
+        
         # Update session in DB
         update_interview_session(
             session_id=session_state.session_id,
@@ -427,16 +473,140 @@ Generate a natural follow-up (1 sentence) that probes a gap or asks for clarific
         
         logger.info(f"Interview summary saved to DB: {session_state.total_duration_seconds}s, fatigue={fatigue}")
         
-        return InterviewMetrics(
+        # Build and return metrics
+        metrics = InterviewMetrics(
             total_questions=session_state.total_questions,
             questions_asked=session_state.questions_asked,
             questions_skipped=session_state.questions_skipped,
             quality_distribution=quality_dist,
             avg_answer_quality=session_state.avg_answer_quality,
-            total_duration_minutes=session_state.total_duration_seconds / 60 if session_state.total_duration_seconds else 0,
-            avg_question_duration_seconds=int(sum(a.duration_seconds or 0 for a in session_state.answers) / len(session_state.answers)) if session_state.answers else 0,
+            best_answer=best_answer,
+            worst_answer=worst_answer,
+            total_duration_minutes=total_duration_minutes,
+            avg_question_duration_seconds=avg_question_duration,
             fatigue_detected=fatigue,
-            reason_for_exit=session_state.exit_reason or DecisionReason.ALL_ASKED,
+            reason_for_exit=session_state.exit_reason if session_state.exit_reason else DecisionReason.ALL_ASKED,
             questions_by_level=questions_by_level,
             performance_by_level=performance_by_level,
         )
+        
+        return metrics
+        
+    async def run_interview(
+        self,
+        session_state: InterviewSessionState,
+        questions: List[Dict],
+        answer_provider: callable,
+    ) -> InterviewMetrics:
+        """
+        Autonomous interview loop. Agent runs full interview without caller orchestration.
+        
+        Args:
+            session_state: Interview session
+            questions: List of questions to ask
+            answer_provider: Async callable(question_text) → answer_text (for testing/mocking)
+        
+        Returns:
+            Final interview metrics
+        """
+        
+        self.load_questions(questions)
+        session_state.total_questions = len(questions)
+        
+        # Save session to DB
+        create_interview_session(
+            session_id=session_state.session_id,
+            run_id=session_state.run_id,
+            total_questions=len(questions),
+            planned_duration_seconds=session_state.planned_duration_seconds,
+            db_path=self.db_path,
+        )
+        
+        logger.info(f"Starting autonomous interview: {len(questions)} questions, {session_state.planned_duration_seconds}s")
+        
+        # Main loop
+        while session_state.is_active:
+            # Get next question
+            question = self.get_next_question()
+            if question is None:
+                session_state.exit_reason = DecisionReason.ALL_ASKED
+                break
+            
+            # Check time limit
+            elapsed = (datetime.now() - session_state.start_time).total_seconds()
+            remaining = session_state.planned_duration_seconds - elapsed
+            if remaining < 120:  # < 2 min left
+                session_state.exit_reason = DecisionReason.TIME_LIMIT
+                break
+            
+            # Get answer from provider (mock or real)
+            try:
+                answer_text = await answer_provider(question["question_text"])
+            except Exception as e:
+                logger.error(f"Error getting answer: {e}")
+                session_state.exit_reason = DecisionReason.CANDIDATE_EXIT
+                break
+            
+            # Record answer + get quality
+            record = await self.record_answer(
+                session_state,
+                question.get("id", self.current_q_index),
+                question["question_text"],
+                question.get("question_level", "mid"),
+                question.get("question_type", "technical"),
+                answer_text,
+                30,  # Mock duration
+            )
+            
+            # Get answer ID from DB
+            answers = list_session_answers(session_state.session_id, db_path=self.db_path)
+            answer_id = answers[-1]["id"] if answers else None
+            
+            # Decide next action
+            decision = await self.decide_next_action(
+                session_state,
+                record.quality,
+                answer_text,
+                question["question_text"],
+                answer_id,
+            )
+            
+            logger.info(f"Decision: {decision.action.value}")
+            
+            # Handle decision
+            if decision.action == DecisionReason.CONTINUE_NORMAL:
+                # Move to next question
+                pass
+            
+            elif decision.action == DecisionReason.PROBE_DEEPER:
+                # Generate + ask follow-up
+                if decision.follow_up:
+                    follow_up_answer = await answer_provider(decision.follow_up)
+                    # Log follow-up but don't re-assess (for demo simplicity)
+                    logger.info(f"Follow-up answer: {follow_up_answer[:80]}...")
+            
+            elif decision.action == DecisionReason.SKIP_QUESTION:
+                # Skip, move to next
+                session_state.questions_skipped += 1
+                self.skip_question()
+            
+            elif decision.action == DecisionReason.TIME_LIMIT:
+                session_state.exit_reason = DecisionReason.TIME_LIMIT
+                break
+            
+            elif decision.action == DecisionReason.FATIGUE:
+                session_state.exit_reason = DecisionReason.FATIGUE
+                break
+            
+            elif decision.action == DecisionReason.CANDIDATE_EXIT:
+                session_state.exit_reason = DecisionReason.CANDIDATE_EXIT
+                break
+            
+            elif decision.action == DecisionReason.ALL_ASKED:
+                break
+        
+        # Generate summary
+        metrics = await self.generate_summary(session_state)
+        logger.info(f"Interview complete: {session_state.questions_asked} asked, avg quality {metrics.avg_answer_quality:.2f}")
+        
+        return metrics
