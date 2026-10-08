@@ -14,7 +14,7 @@ MODEL_COSTS = {
         "input": 0.15,
         "output": 0.60,
     },
-    "gpt-4o-mini": {
+    "gpt-5.4-nano": {
         "input": 0.15,
         "output": 0.60,
     },

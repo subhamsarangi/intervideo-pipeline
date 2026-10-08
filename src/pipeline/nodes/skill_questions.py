@@ -122,7 +122,7 @@ Focus on practical experience, depth of knowledge, and relevance to the job requ
 
             try:
                 response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-5.4-nano",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": skill_prompt},
@@ -135,7 +135,7 @@ Focus on practical experience, depth of knowledge, and relevance to the job requ
                 if hasattr(response, "usage") and response.usage:
                     increment_llm_calls(
                         operation="skill_questions_generation",
-                        model="gpt-4o-mini",
+                        model="gpt-5.4-nano",
                         input_tokens=response.usage.prompt_tokens,
                         output_tokens=response.usage.completion_tokens,
                     )
