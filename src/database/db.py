@@ -1,4 +1,4 @@
-"""Database layer for RecRoot"""
+"""Database layer for Intervideo-Pipeline"""
 
 import sqlite3
 import json

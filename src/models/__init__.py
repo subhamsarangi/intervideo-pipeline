@@ -1,1 +1,1 @@
-"""Pydantic models and schemas for RecRoot"""
+"""Pydantic models and schemas for Intervideo-Pipeline"""

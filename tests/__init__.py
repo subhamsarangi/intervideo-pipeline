@@ -1,1 +1,1 @@
-"""Test suite for RecRoot"""
+"""Test suite for Intervideo-Pipeline"""

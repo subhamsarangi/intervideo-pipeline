@@ -1,1 +1,1 @@
-"""Database layer for RecRoot"""
+"""Database layer for Intervideo-Pipeline"""

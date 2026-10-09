@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import pipeline
 
-app = FastAPI(title="Recroot API", version="1.0.0")
+app = FastAPI(title="Intervideo-Pipeline API", version="1.0.0")
 
 # CORS
 app.add_middleware(
@@ -18,7 +18,7 @@ app.include_router(pipeline.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "Recroot API", "version": "1.0.0"}
+    return {"message": "Intervideo-Pipeline API", "version": "1.0.0"}
 
 @app.get("/health")
 def health():

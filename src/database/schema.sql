@@ -1,4 +1,4 @@
--- RecRoot Database Schema
+-- Intervideo-Pipeline Database Schema
 
 -- CV Documents
 CREATE TABLE IF NOT EXISTS cv_documents (

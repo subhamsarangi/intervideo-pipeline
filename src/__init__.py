@@ -1,1 +1,1 @@
-"""RecRoot: CV × Job Description Question Generator"""
+"""Intervideo-Pipeline: CV × Job Description Question Generator"""
