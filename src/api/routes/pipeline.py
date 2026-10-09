@@ -24,13 +24,21 @@ async def get_run_questions(
     run_id: int,
     status: str = "candidate"
 ) -> List[Dict[str, Any]]:
-    """Get questions for a pipeline run"""
+    """Get questions for a pipeline run (minimal fields for client)"""
     run = get_pipeline_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Pipeline run not found")
     
     questions = list_questions_by_run(run_id, status=status)
-    return questions
+    # Return only essential fields for the client (question_text, id, level)
+    return [
+        {
+            "id": q.get("id"),
+            "question_text": q.get("question_text"),
+            "level": q.get("level"),
+        }
+        for q in questions
+    ]
 
 
 @router.get("/{run_id}/steps")
