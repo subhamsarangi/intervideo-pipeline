@@ -123,12 +123,18 @@ def print_cost_summary(cv_id: int, jd_id: int):
     print(f"   Calls: {jd_cost['llm_calls_count']} | Tokens: {jd_cost['total_input_tokens']}+{jd_cost['total_output_tokens']} | Cost: ${jd_cost['total_cost_usd']:.6f}")
     
     print(f"\n⚙️  Pipeline:")
-    print(f"   Calls: {pipeline_cost['llm_calls_count']} | Tokens: {pipeline_cost['total_input_tokens']}+{pipeline_cost['total_output_tokens']} | Cost: ${pipeline_cost['total_cost_usd']:.6f}")
+    # Handle pipeline_cost which might have different key names
+    pipeline_calls = pipeline_cost.get('llm_calls_count') or pipeline_cost.get('call_count') or 0
+    pipeline_input = pipeline_cost.get('total_input_tokens') or pipeline_cost.get('input_tokens') or 0
+    pipeline_output = pipeline_cost.get('total_output_tokens') or pipeline_cost.get('output_tokens') or 0
+    pipeline_usd = pipeline_cost.get('total_cost_usd') or pipeline_cost.get('cost_usd') or 0.0
     
-    total_cost = cv_cost['total_cost_usd'] + jd_cost['total_cost_usd'] + pipeline_cost['total_cost_usd']
-    total_calls = cv_cost['llm_calls_count'] + jd_cost['llm_calls_count'] + pipeline_cost['llm_calls_count']
-    total_input = cv_cost['total_input_tokens'] + jd_cost['total_input_tokens'] + pipeline_cost['total_input_tokens']
-    total_output = cv_cost['total_output_tokens'] + jd_cost['total_output_tokens'] + pipeline_cost['total_output_tokens']
+    print(f"   Calls: {pipeline_calls} | Tokens: {pipeline_input}+{pipeline_output} | Cost: ${pipeline_usd:.6f}")
+    
+    total_cost = cv_cost['total_cost_usd'] + jd_cost['total_cost_usd'] + pipeline_usd
+    total_calls = cv_cost['llm_calls_count'] + jd_cost['llm_calls_count'] + pipeline_calls
+    total_input = cv_cost['total_input_tokens'] + jd_cost['total_input_tokens'] + pipeline_input
+    total_output = cv_cost['total_output_tokens'] + jd_cost['total_output_tokens'] + pipeline_output
     
     print(f"\n💰 TOTAL: {total_calls} calls | {total_input}+{total_output} tokens | ${total_cost:.6f}")
     print(f"   1000 sessions: ~${total_cost * 1000:.2f}")
