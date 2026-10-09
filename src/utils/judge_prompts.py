@@ -80,7 +80,17 @@ def get_judge_user_prompt(questions: list, jd_context: dict, cv_context: dict = 
     jd_title = jd_context.get("job_title", "N/A")
     jd_summary = jd_context.get("summary", "N/A")
     requirements = jd_context.get("requirements", [])
-    req_text = "; ".join([r.get("text", "") if isinstance(r, dict) else str(r) for r in requirements[:5]])
+    
+    # Handle requirements as either dicts or objects
+    req_texts = []
+    for r in requirements[:5]:
+        if isinstance(r, dict):
+            req_texts.append(r.get("text", ""))
+        elif hasattr(r, "text"):
+            req_texts.append(r.text)
+        else:
+            req_texts.append(str(r))
+    req_text = "; ".join(filter(None, req_texts))  # Filter out empty strings
     
     cv_info = ""
     if cv_context:
@@ -89,17 +99,47 @@ def get_judge_user_prompt(questions: list, jd_context: dict, cv_context: dict = 
         projects = cv_context.get("projects", [])
         skills = cv_context.get("skills", [])
         
+        # Extract project titles properly
+        project_titles = []
+        for p in projects[:3]:
+            if isinstance(p, dict):
+                project_titles.append(p.get("title", ""))
+            elif hasattr(p, "title"):
+                project_titles.append(p.title)
+            else:
+                project_titles.append(str(p))
+        
+        # Extract skill names properly
+        skill_names = []
+        for s in skills[:5]:
+            if isinstance(s, dict):
+                skill_names.append(s.get("skill_name", ""))
+            elif hasattr(s, "skill_name"):
+                skill_names.append(s.skill_name)
+            else:
+                skill_names.append(str(s))
+        
         cv_summary = f"\nCandidate: {name}, {years} years experience"
-        if projects:
-            cv_summary += f"\nKey Projects: {', '.join(projects[:3])}"
-        if skills:
-            cv_summary += f"\nSkills: {', '.join(skills[:5])}"
+        if project_titles:
+            cv_summary += f"\nKey Projects: {', '.join(filter(None, project_titles))}"
+        if skill_names:
+            cv_summary += f"\nSkills: {', '.join(filter(None, skill_names))}"
         cv_info = cv_summary
     
-    questions_text = "\n".join([
-        f"{i+1}. [{q.get('level', 'N/A').upper()}] {q.get('question_text', 'N/A')}"
-        for i, q in enumerate(questions[:10])
-    ])
+    questions_text = []
+    for i, q in enumerate(questions[:10]):
+        if isinstance(q, dict):
+            level = q.get('level', 'N/A').upper()
+            text = q.get('question_text', 'N/A')
+        elif hasattr(q, 'level') and hasattr(q, 'question_text'):
+            level = q.level.upper()
+            text = q.question_text
+        else:
+            level = 'N/A'
+            text = str(q)
+        questions_text.append(f"{i+1}. [{level}] {text}")
+    
+    questions_formatted = "\n".join(questions_text)
     
     return f"""ROLE CONTEXT:
 Job Title: {jd_title}
@@ -107,6 +147,6 @@ Summary: {jd_summary}
 Top Requirements: {req_text}{cv_info}
 
 QUESTIONS TO EVALUATE:
-{questions_text}
+{questions_formatted}
 
 Score each question using the rubrics. Return one entry per question with its question_index."""

@@ -108,6 +108,8 @@ async def enrichment_node(
     else:
         state_dict = dict(state)
 
+    print("   → enrichment: searching web for flagged tech...", flush=True)
+
     run_id = state_dict.get("run_id")
     db_path = state_dict.get("db_path")
 
@@ -133,9 +135,7 @@ async def enrichment_node(
                 db_path=db_path,
             )
             return {
-                "status": state_dict.get("status", "running"),
                 "enrichment_result": enrichment_result,
-                "error_message": None,
             }
 
         if isinstance(triage_raw, TriageResult):
@@ -147,6 +147,7 @@ async def enrichment_node(
 
         # 2. Skip if no items flagged — zero API calls, zero cost
         if not flagged_items:
+            print(f"      → no flagged items, skipping Tavily searches (zero cost)", flush=True)
             enrichment_result = EnrichmentResult(
                 enrichment_context={},
                 sources_used=[],
@@ -158,9 +159,7 @@ async def enrichment_node(
                 db_path=db_path,
             )
             return {
-                "status": state_dict.get("status", "running"),
                 "enrichment_result": enrichment_result,
-                "error_message": None,
             }
 
         # 3. Retrieve job title for better query context
@@ -176,9 +175,12 @@ async def enrichment_node(
         sources_used: List[str] = []
         search_errors: List[str] = []
 
+        print(f"      → searching for {len(flagged_items)} flagged tech items via Tavily ($0.005/call)...", flush=True)
+
         for item in flagged_items:
             query = _build_search_query(item, jd_title)
             try:
+                print(f"         → Tavily search: '{query}'", flush=True)
                 results = await _call_tavily(query)
 
                 # Track Tavily cost — $0.005 per call
@@ -188,6 +190,7 @@ async def enrichment_node(
                 )
 
                 if not results:
+                    print(f"            no results", flush=True)
                     enrichment_context[item] = ""
                     continue
 
@@ -202,6 +205,7 @@ async def enrichment_node(
                             snippets.append(_sanitize_and_wrap(content, url))
                             sources_used.append(url)
 
+                print(f"            collected {len(snippets)} snippets, {sum(len(s) for s in snippets)} chars", flush=True)
                 enrichment_context[item] = "\n\n".join(snippets)
 
             except RuntimeError as e:
@@ -229,9 +233,7 @@ async def enrichment_node(
         )
 
         return {
-            "status": state_dict.get("status", "running"),
             "enrichment_result": enrichment_result,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -249,7 +251,6 @@ async def enrichment_node(
             db_path=db_path,
         )
         return {
-            "status": "failed",
             "error_message": error_msg,
         }
 

@@ -52,6 +52,40 @@ FAST_MOVING_PATTERNS = [
 ]
 
 
+def calculate_project_recency_weight(duration: Optional[str]) -> float:
+    """
+    Calculate recency weight for a project based on duration/end date.
+    
+    More recent projects get weight closer to 1.0.
+    Older projects get weight closer to 0.1 (minimum).
+    
+    Tries to parse end date from duration string (e.g., "Jan 2024 - Mar 2024", "2023").
+    If parsing fails, returns neutral weight 0.5.
+    """
+    from datetime import datetime
+    import re
+    
+    if not duration:
+        return 0.5  # No date info = neutral weight
+    
+    try:
+        # Try to extract year from duration string (prioritize last year = end date)
+        years = re.findall(r'20\d{2}', duration)
+        if not years:
+            return 0.5
+        
+        end_year = int(years[-1])  # Use last year found (most likely end date)
+        current_year = datetime.now().year
+        years_ago = current_year - end_year
+        
+        # Weight formula: 1.0 for current year, decaying to 0.1 for 10+ years ago
+        # Linear decay: weight = 1.0 - (years_ago * 0.09) clamped to [0.1, 1.0]
+        weight = max(0.1, 1.0 - (years_ago * 0.09))
+        return round(weight, 3)
+    except:
+        return 0.5  # If parsing fails, neutral weight
+
+
 def detect_fast_moving_tech(text: str) -> List[str]:
     """
     Detect technologies in text that are fast-moving or recent and warrant web enrichment.
@@ -89,6 +123,8 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         state_dict = state.model_dump()
     else:
         state_dict = dict(state)
+
+    print("   → triage: ranking projects/skills by relevance...", flush=True)
 
     run_id = state_dict.get("run_id")
     cv_id = state_dict.get("cv_id")
@@ -135,6 +171,8 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         projects: List[CVProject] = cv_obj.projects or []
         skills: List[CVSkill] = cv_obj.skills or []
         requirements: List[JDRequirement] = jd_obj.requirements or []
+
+        print(f"      → found {len(projects)} projects, {len(skills)} skills, {len(requirements)} JD requirements", flush=True)
 
         flagged_items: Set[str] = set()
 
@@ -184,6 +222,7 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
 
         # 4. Generate embeddings in batches
         all_texts_to_embed = jd_texts + proj_texts + skill_texts
+        print(f"      → embedding {len(all_texts_to_embed)} items (JD: {len(jd_texts)}, projects: {len(proj_texts)}, skills: {len(skill_texts)}) with OpenAI...", flush=True)
         all_embeddings = await get_embeddings_batch(all_texts_to_embed)
 
         jd_len = len(jd_texts)
@@ -194,19 +233,33 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         skill_embeddings = np.array(all_embeddings[jd_len + proj_len :], dtype=np.float32)
 
         # 5. Calculate similarity scores and rank
+        # Build requirement type weights: must-have gets 2x weight
+        requirement_weights = []
+        for req in requirements:
+            weight = 2.0 if req.requirement_type == "must_have" else 1.0
+            requirement_weights.append(weight)
+        requirement_weights = np.array(requirement_weights, dtype=np.float32)
+        
         # Rank Projects
         ranked_projects = []
         if proj_len > 0 and jd_len > 0:
+            print(f"      → ranking {len(projects)} projects by JD relevance (weighted by must-have + recency)...", flush=True)
             sim_matrix_proj = cosine_similarity_matrix(proj_embeddings, jd_embeddings)
-            # For each project, compute max relevance across JD requirements and top-2 mean
+            # For each project, compute weighted average relevance across JD requirements
             for idx, proj in enumerate(projects):
                 proj_sims = sim_matrix_proj[idx]
-                max_score = float(np.max(proj_sims)) if proj_sims.size > 0 else 0.0
+                # Weighted average: higher weight for must-have requirements
+                relevance_score = float(np.average(proj_sims, weights=requirement_weights)) if proj_sims.size > 0 else 0.0
+                
+                # Apply recency weight: older projects score lower
+                recency_weight = calculate_project_recency_weight(proj.duration)
+                final_score = relevance_score * recency_weight
+                
                 ranked_projects.append(
                     {
                         "id": f"proj_{idx + 1}",
                         "title": proj.title,
-                        "score": round(max_score, 4),
+                        "score": round(final_score, 4),
                         "project": proj.model_dump(),
                     }
                 )
@@ -216,15 +269,17 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         # Rank Skills
         ranked_skills = []
         if len(skill_texts) > 0 and jd_len > 0:
+            print(f"      → ranking {len(skills)} skills by JD relevance (weighted by must-have)...", flush=True)
             sim_matrix_skills = cosine_similarity_matrix(skill_embeddings, jd_embeddings)
             for idx, skill in enumerate(skills):
                 skill_sims = sim_matrix_skills[idx]
-                max_score = float(np.max(skill_sims)) if skill_sims.size > 0 else 0.0
+                # Weighted average: higher weight for must-have requirements
+                weighted_score = float(np.average(skill_sims, weights=requirement_weights)) if skill_sims.size > 0 else 0.0
                 ranked_skills.append(
                     {
                         "id": f"skill_{idx + 1}",
                         "skill_name": skill.skill_name,
-                        "score": round(max_score, 4),
+                        "score": round(weighted_score, 4),
                         "skill": skill.model_dump(),
                     }
                 )
@@ -232,6 +287,7 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
             ranked_skills.sort(key=lambda x: x["score"], reverse=True)
 
         # 6. Build TriageResult
+        print(f"      → flagged {len(flagged_items)} tech items for web enrichment: {sorted(list(flagged_items))[:5]}" + (f" +{len(flagged_items)-5} more" if len(flagged_items) > 5 else ""), flush=True)
         triage_result = TriageResult(
             ranked_projects=ranked_projects,
             ranked_skills=ranked_skills,
@@ -247,11 +303,9 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         )
 
         return {
-            "status": "running",
             "cv": cv_obj,
             "jd": jd_obj,
             "triage_result": triage_result,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -269,7 +323,6 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
             db_path=db_path,
         )
         return {
-            "status": "failed",
             "error_message": error_msg,
         }
 

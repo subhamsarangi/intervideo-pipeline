@@ -5,3 +5,7 @@ __pycache__/
 outputs/
 .pytest_cache/
 *.db
+uploads/
+.pipeline_cache/
+*.db-shm
+*.db-wal

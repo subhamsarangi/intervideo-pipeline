@@ -18,6 +18,9 @@ from src.utils.embeddings import get_async_openai_client
 from src.utils.llm_tracking import increment_llm_calls
 from src.utils.question_prompts import PROJECT_QUESTIONS_SYSTEM_PROMPT, get_project_user_prompt
 
+# Hard limit: only generate questions for top N projects
+MAX_PROJECTS_TO_PROCESS = 3
+
 
 class ProjectQuestionsResponse(BaseModel):
     """Response model for project questions"""
@@ -43,6 +46,8 @@ async def project_questions_node(
         state_dict = state.model_dump()
     else:
         state_dict = dict(state)
+
+    print("   → project_questions: generating interview questions...", flush=True)
 
     run_id = state_dict.get("run_id")
     db_path = state_dict.get("db_path")
@@ -87,6 +92,11 @@ async def project_questions_node(
                 "error_message": None,
             }
 
+        # Hard limit: only process top N projects
+        projects_to_process = ranked_projects[:MAX_PROJECTS_TO_PROCESS]
+        if len(ranked_projects) > MAX_PROJECTS_TO_PROCESS:
+            print(f"      → processing only top {MAX_PROJECTS_TO_PROCESS}/{len(ranked_projects)} projects (cost optimization)", flush=True)
+
         # Generate questions for each project using Instructor
         all_questions: List[StructuredQuestion] = []
         client = get_async_openai_client()
@@ -94,7 +104,9 @@ async def project_questions_node(
         # Wrap client with Instructor
         client = instructor.from_openai(client)
 
-        for proj_idx, proj_data in enumerate(ranked_projects):
+        print(f"      → calling gpt-5.4-nano for {len(projects_to_process)} projects...", flush=True)
+
+        for proj_idx, proj_data in enumerate(projects_to_process):
             proj_obj = proj_data.get("project")
             if not proj_obj:
                 continue
@@ -104,6 +116,7 @@ async def project_questions_node(
 
             try:
                 # Call with Instructor for structured output
+                print(f"         → [{proj_idx+1}/{len(projects_to_process)}] {proj_obj.get('title', 'Project')}...", flush=True)
                 response = await client.chat.completions.create(
                     model="gpt-5.4-nano",
                     messages=[
@@ -117,6 +130,7 @@ async def project_questions_node(
 
                 # Track LLM call
                 if hasattr(response, "usage") and response.usage:
+                    print(f"            {response.usage.prompt_tokens}+{response.usage.completion_tokens} tokens", flush=True)
                     increment_llm_calls(
                         operation="project_questions_generation",
                         model="gpt-5.4-nano",
@@ -129,6 +143,8 @@ async def project_questions_node(
                     q.source_type = "project"
                     q.source_id = proj_data.get("id")
                     all_questions.append(q)
+                
+                print(f"            generated {len(response.questions)} questions", flush=True)
 
             except Exception as e:
                 print(f"Error generating questions for project {proj_idx} ({proj_obj.get('title')}): {e}")
@@ -139,6 +155,8 @@ async def project_questions_node(
             "mid": sum(1 for q in all_questions if q.level == ProficiencyLevel.MID),
             "senior": sum(1 for q in all_questions if q.level == ProficiencyLevel.SENIOR),
         }
+
+        print(f"      → total: {len(all_questions)} questions ({level_dist['junior']}j / {level_dist['mid']}m / {level_dist['senior']}s)", flush=True)
 
         # Log completion
         update_pipeline_step(
@@ -152,10 +170,8 @@ async def project_questions_node(
         )
 
         return {
-            "status": "running",
             "project_questions": [q.model_dump() for q in all_questions],
             "level_distribution": level_dist,
-            "error_message": None,
         }
 
     except Exception as e:

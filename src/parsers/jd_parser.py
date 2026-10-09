@@ -1,4 +1,4 @@
-"""JD Parser - handles pasted text, URLs, and file uploads with Instructor"""
+"""JD Parser - handles pasted text, URLs, PDF files, and file uploads with Instructor"""
 
 import json
 import os
@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import httpx
 from openai import OpenAI
 import instructor
+from llama_cloud import AsyncLlamaCloud
 
 from src.models.jd import ParsedJD, JDRequirement
 from src.utils.security import validate_jd_url
@@ -33,6 +34,44 @@ def get_plain_openai_client():
     if not api_key:
         raise ValueError("OPENAI_API_KEY not set in .env")
     return OpenAI(api_key=api_key)
+
+
+def get_llama_api_key() -> str:
+    """Get LlamaParse API key from environment"""
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    if not api_key:
+        raise ValueError("LLAMA_CLOUD_API_KEY not set in .env")
+    return api_key
+
+
+async def parse_jd_pdf(file_path: str) -> str:
+    """Parse JD PDF using LlamaParse (same as CV parsing)"""
+    api_key = get_llama_api_key()
+    client = AsyncLlamaCloud(api_key=api_key)
+
+    try:
+        file_obj = await client.files.create(file=file_path, purpose="parse")
+
+        result = await client.parsing.parse(
+            file_id=file_obj.id, tier="agentic", version="latest", expand=["markdown"]
+        )
+
+        if result.markdown and result.markdown.pages:
+            md_text = "\n\n".join(p.markdown for p in result.markdown.pages)
+        else:
+            md_text = ""
+
+        increment_llm_calls(
+            operation="llamaparse_jd_pdf",
+            model="llamaparse",
+            input_tokens=0,
+            output_tokens=0,
+        )
+
+        return md_text
+
+    except Exception as e:
+        raise Exception(f"LlamaParse JD PDF failed: {str(e)}")
 
 
 async def fetch_url_content(url: str) -> str:
@@ -162,12 +201,21 @@ async def parse_jd(
         if not source_url:
             raise ValueError("source_url required for URL source type")
         parsed_jd = await parse_jd_url(source_url)
+    elif source_type == "pdf":
+        # source_data is file path for PDF
+        raw_text = await parse_jd_pdf(source_data)
+        if not raw_text or len(raw_text.strip()) == 0:
+            raise ValueError("No text extracted from JD PDF")
+        parsed_jd = extract_jd_structure(raw_text)
     elif source_type == "file":
         if not source_url:
             raise ValueError("file_name required for file source type")
         parsed_jd = await parse_jd_file(source_data, source_url)
     else:
         raise ValueError(f"Invalid source_type: {source_type}")
+
+    # Save parsed content to outputs folder
+    save_jd_to_markdown(parsed_jd, source_data)
 
     # Save tracking data to database if jd_id provided
     if jd_id is not None:
@@ -198,3 +246,43 @@ def auto_generate_jd_title(parsed_jd: ParsedJD) -> str:
     if parsed_jd.job_title:
         return parsed_jd.job_title
     return "Unnamed Job Description"
+
+
+def save_jd_to_markdown(parsed_jd: ParsedJD, file_path: str) -> None:
+    """Save parsed JD to outputs folder as markdown"""
+    from pathlib import Path
+    from datetime import datetime
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_title = re.sub(r"[^\w\s-]", "", parsed_jd.job_title or "JD").replace(" ", "_")
+    output_file = Path(f"outputs/jd_{safe_title}_{timestamp}.md")
+    output_file.parent.mkdir(exist_ok=True)
+    
+    # Separate must-have and nice-to-have
+    must_have = [r for r in (parsed_jd.requirements or []) if r.requirement_type == "must_have"]
+    nice_to_have = [r for r in (parsed_jd.requirements or []) if r.requirement_type == "nice_to_have"]
+    
+    content = f"""# Job Description: {parsed_jd.job_title or 'N/A'}
+
+**Company:** {parsed_jd.company or 'N/A'}
+
+## Summary
+{parsed_jd.summary or 'N/A'}
+
+## Must-Have Requirements ({len(must_have)})
+"""
+    
+    for i, req in enumerate(must_have, 1):
+        content += f"\n{i}. {req.text}"
+        if req.category:
+            content += f" _{req.category}_"
+        content += "\n"
+    
+    content += f"\n## Nice-to-Have Requirements ({len(nice_to_have)})\n"
+    for i, req in enumerate(nice_to_have, 1):
+        content += f"\n{i}. {req.text}"
+        if req.category:
+            content += f" _{req.category}_"
+        content += "\n"
+    
+    output_file.write_text(content)

@@ -17,6 +17,9 @@ from src.utils.embeddings import get_async_openai_client
 from src.utils.llm_tracking import increment_llm_calls
 from src.utils.question_prompts import SKILL_QUESTIONS_SYSTEM_PROMPT, get_skill_user_prompt
 
+# Hard limit: only generate questions for top N skills
+MAX_SKILLS_TO_PROCESS = 5
+
 
 class SkillQuestionsResponse(BaseModel):
     """Response model for skill questions"""
@@ -42,6 +45,8 @@ async def skill_questions_node(
         state_dict = state.model_dump()
     else:
         state_dict = dict(state)
+
+    print("   → skill_questions: generating skill-based questions...", flush=True)
 
     run_id = state_dict.get("run_id")
     db_path = state_dict.get("db_path")
@@ -86,6 +91,11 @@ async def skill_questions_node(
                 "error_message": None,
             }
 
+        # Hard limit: only process top N skills
+        skills_to_process = ranked_skills[:MAX_SKILLS_TO_PROCESS]
+        if len(ranked_skills) > MAX_SKILLS_TO_PROCESS:
+            print(f"      → processing only top {MAX_SKILLS_TO_PROCESS}/{len(ranked_skills)} skills (cost optimization)", flush=True)
+
         # Generate questions for each skill using Instructor
         all_questions: List[StructuredQuestion] = []
         client = get_async_openai_client()
@@ -93,7 +103,9 @@ async def skill_questions_node(
         # Wrap client with Instructor
         client = instructor.from_openai(client)
 
-        for skill_idx, skill_data in enumerate(ranked_skills):
+        print(f"      → calling gpt-5.4-nano for {len(skills_to_process)} skills...", flush=True)
+
+        for skill_idx, skill_data in enumerate(skills_to_process):
             skill_obj = skill_data.get("skill")
             if not skill_obj:
                 continue
@@ -103,6 +115,7 @@ async def skill_questions_node(
 
             try:
                 # Call with Instructor for structured output
+                print(f"         → [{skill_idx+1}/{len(skills_to_process)}] {skill_obj.get('skill_name', 'Skill')}...", flush=True)
                 response = await client.chat.completions.create(
                     model="gpt-5.4-nano",
                     messages=[
@@ -116,6 +129,7 @@ async def skill_questions_node(
 
                 # Track LLM call
                 if hasattr(response, "usage") and response.usage:
+                    print(f"            {response.usage.prompt_tokens}+{response.usage.completion_tokens} tokens", flush=True)
                     increment_llm_calls(
                         operation="skill_questions_generation",
                         model="gpt-5.4-nano",
@@ -128,6 +142,8 @@ async def skill_questions_node(
                     q.source_type = "skill"
                     q.source_id = skill_data.get("id")
                     all_questions.append(q)
+                
+                print(f"            generated {len(response.questions)} questions", flush=True)
 
             except Exception as e:
                 print(f"Error generating questions for skill {skill_idx} ({skill_obj.get('skill_name')}): {e}")
@@ -138,6 +154,8 @@ async def skill_questions_node(
             "mid": sum(1 for q in all_questions if q.level == ProficiencyLevel.MID),
             "senior": sum(1 for q in all_questions if q.level == ProficiencyLevel.SENIOR),
         }
+
+        print(f"      → total: {len(all_questions)} questions ({level_dist['junior']}j / {level_dist['mid']}m / {level_dist['senior']}s)", flush=True)
 
         # Log completion
         update_pipeline_step(
@@ -151,10 +169,8 @@ async def skill_questions_node(
         )
 
         return {
-            "status": "running",
             "skill_questions": [q.model_dump() for q in all_questions],
             "level_distribution": level_dist,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -172,6 +188,6 @@ async def skill_questions_node(
             db_path=db_path,
         )
         return {
-            "status": "failed",
-            "error_message": error_msg,
+            "skill_questions": [q.model_dump() for q in all_questions],
+            "level_distribution": level_dist,
         }

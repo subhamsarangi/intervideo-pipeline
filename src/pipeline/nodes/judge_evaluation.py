@@ -80,6 +80,8 @@ async def judge_evaluation_node(
     else:
         state_dict = dict(state)
 
+    print("   → judge_evaluation: scoring & filtering questions...", flush=True)
+
     run_id = state_dict.get("run_id")
     db_path = state_dict.get("db_path")
 
@@ -92,9 +94,18 @@ async def judge_evaluation_node(
 
     try:
         # Get merged questions
-        merged_questions: List[Dict] = state_dict.get("merged_questions", [])
+        merged_qs = state_dict.get("merged_questions")
+        if merged_qs is None or (isinstance(merged_qs, dict) and not merged_qs.get("questions")):
+            merged_questions = []
+        elif isinstance(merged_qs, dict):
+            merged_questions = merged_qs.get("questions", [])
+        elif hasattr(merged_qs, "questions"):
+            merged_questions = merged_qs.questions
+        else:
+            merged_questions = []
 
         if not merged_questions:
+            print(f"      → no questions to evaluate", flush=True)
             update_pipeline_step(
                 step_id,
                 status="completed",
@@ -102,12 +113,12 @@ async def judge_evaluation_node(
                 db_path=db_path,
             )
             return {
-                "status": "running",
                 "evaluated_questions": [],
                 "passed_count": 0,
                 "rejected_count": 0,
-                "error_message": None,
             }
+
+        print(f"      → evaluating {len(merged_questions)} questions in batches of {BATCH_SIZE}...", flush=True)
 
         # Get JD and CV context
         jd_obj = state_dict.get("jd")
@@ -133,18 +144,24 @@ async def judge_evaluation_node(
         for batch_start in range(0, len(merged_questions), BATCH_SIZE):
             batch_no = batch_start // BATCH_SIZE
             batch = merged_questions[batch_start : batch_start + BATCH_SIZE]
+            
+            # Convert objects to dicts for prompt building
+            batch_dicts = [q.model_dump() if hasattr(q, 'model_dump') else q for q in batch]
+
+            print(f"         → batch {batch_no+1}/{(len(merged_questions) + BATCH_SIZE - 1) // BATCH_SIZE}: {len(batch)} questions...", flush=True)
 
             # Score the batch, retrying once if any question is missing a score
             scores: Dict[int, QuestionScore] = {}
             last_error = None
             for _ in range(MAX_ATTEMPTS):
                 try:
-                    got = await _score_batch(client, batch, jd_dict, cv_dict)
+                    got = await _score_batch(client, batch_dicts, jd_dict, cv_dict)
+                    print(f"            scored {len(got)}/{len(batch)}", flush=True)
                     for idx, s in got.items():
                         scores.setdefault(idx, s)
                 except Exception as e:
                     last_error = str(e)
-                    print(f"Error evaluating batch {batch_no}: {e}")
+                    print(f"            error: {e}", flush=True)
                 if len(scores) == len(batch):
                     break
 
@@ -200,8 +217,10 @@ async def judge_evaluation_node(
         total_count = len(all_evaluated)
         pass_rate = passed_count / total_count if total_count > 0 else 0
 
+        print(f"      → final: {total_count} evaluated | {passed_count} passed ({pass_rate*100:.1f}%) | {rejected_count} rejected", flush=True)
+
         if failed_questions:
-            print(f"Judge: {len(failed_questions)} question(s) could not be scored")
+            print(f"         ⚠️  {len(failed_questions)} questions could not be scored", flush=True)
 
         # Log completion
         update_pipeline_step(
@@ -219,12 +238,10 @@ async def judge_evaluation_node(
         )
 
         return {
-            "status": "running",
             "evaluated_questions": all_evaluated,
             "passed_count": passed_count,
             "rejected_count": rejected_count,
             "pass_rate": pass_rate,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -242,6 +259,5 @@ async def judge_evaluation_node(
             db_path=db_path,
         )
         return {
-            "status": "failed",
             "error_message": error_msg,
         }

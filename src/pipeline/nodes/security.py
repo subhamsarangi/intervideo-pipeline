@@ -35,6 +35,8 @@ def security_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, Any]
     else:
         state_dict = dict(state)
 
+    print("   → security: validating CV/JD...", flush=True)
+
     run_id = state_dict.get("run_id")
     cv_id = state_dict.get("cv_id")
     jd_id = state_dict.get("jd_id")
@@ -67,13 +69,17 @@ def security_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, Any]
         jd_source_url = jd_doc.get("source_url")
 
         # 3. Run validation checks
+        print(f"      → checking {len(cv_raw_text)} chars CV for injection patterns...", flush=True)
         validate_cv_text(cv_raw_text)
+        print(f"      → checking {len(jd_raw_text)} chars JD for injection patterns...", flush=True)
         validate_jd_text(jd_raw_text)
 
         if jd_source_type == "url" and jd_source_url:
+            print(f"      → validating JD URL: {jd_source_url}", flush=True)
             validate_jd_url(jd_source_url)
 
         # 4. Wrap content in delimiters
+        print(f"      → wrapping CV & JD in security delimiters...", flush=True)
         wrapped_cv = wrap_content_delimiters(cv_raw_text, "cv")
         wrapped_jd = wrap_content_delimiters(jd_raw_text, "jd")
 
@@ -106,12 +112,10 @@ def security_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, Any]
         )
 
         return {
-            "status": "running",
             "cv": parsed_cv,
             "jd": parsed_jd,
             "wrapped_cv": wrapped_cv,
             "wrapped_jd": wrapped_jd,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -129,7 +133,6 @@ def security_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, Any]
             db_path=db_path,
         )
         return {
-            "status": "failed",
             "error_message": error_msg,
         }
 

@@ -78,50 +78,20 @@ async def build_graph(db_path: str):
     
     # Define main execution flow
     graph.add_edge("security", "triage")
-    
-    # Conditional enrichment
-    graph.add_conditional_edges(
-        "triage",
-        should_enrich,
-        {
-            True: "enrichment",   # If flagged items, enrich
-            False: "project_questions",  # Skip enrichment, go to questions
-        }
-    )
-    
-    # Enrichment merges into parallel question generation
+    graph.add_edge("triage", "enrichment")
     graph.add_edge("enrichment", "project_questions")
-    
-    # Parallel fan-out: both questions run concurrently
-    # After triage (no enrichment path), questions start in parallel
-    # We achieve this by having both question nodes be reachable from same source
-    # LangGraph automatically parallelizes nodes with independent inputs
-    
-    # Both project and skill questions feed into merge_dedupe
-    graph.add_edge("project_questions", "merge_dedupe")
-    graph.add_edge("skill_questions", "merge_dedupe")
-    
-    # From project_questions, also start skill_questions in parallel
-    # (LangGraph orchestrates parallel execution when multiple paths converge)
     graph.add_edge("project_questions", "skill_questions")
-    
-    # merge_dedupe feeds directly to judge (no gap-fill conditional)
+    graph.add_edge("skill_questions", "merge_dedupe")
     graph.add_edge("merge_dedupe", "judge_evaluation")
-    
-    # Judge evaluation is final step
     graph.add_edge("judge_evaluation", END)
     
     # Set entry point
     graph.set_entry_point("security")
     
-    # Configure AsyncSqliteSaver for async checkpointing
-    conn = await aiosqlite.connect(db_path)
-    checkpointer = AsyncSqliteSaver(conn)
+    # Compile graph WITHOUT checkpointing to avoid schema issues
+    compiled_graph = graph.compile()
     
-    # Compile graph with checkpointer for resumption support
-    compiled_graph = graph.compile(checkpointer=checkpointer)
-    
-    logger.info(f"Built LangGraph pipeline with AsyncSqliteSaver checkpointing to {db_path}")
+    logger.info(f"Built LangGraph pipeline (checkpointing disabled)")
     
     return compiled_graph
 

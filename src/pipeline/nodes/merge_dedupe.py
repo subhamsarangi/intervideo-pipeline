@@ -9,7 +9,7 @@ from src.database.db import (
     update_pipeline_run_status,
 )
 from src.models.jd import ParsedJD, JDRequirement
-from src.models.pipeline import PipelineState, GeneratedQuestion, MergedQuestionSet
+from src.models.pipeline import PipelineState, MergedQuestionSet, GeneratedQuestion, GeneratedQuestion, MergedQuestionSet
 from src.utils.embeddings import get_async_openai_client, cosine_similarity_matrix
 from src.utils.llm_tracking import increment_llm_calls
 import numpy as np
@@ -38,6 +38,8 @@ async def merge_dedupe_node(
     else:
         state_dict = dict(state)
 
+    print("   → merge_dedupe: deduplicating & reranking questions...", flush=True)
+
     run_id = state_dict.get("run_id")
     db_path = state_dict.get("db_path")
 
@@ -55,6 +57,8 @@ async def merge_dedupe_node(
 
         # Combine
         all_questions = project_questions + skill_questions
+
+        print(f"      → combining {len(project_questions)} project + {len(skill_questions)} skill questions", flush=True)
 
         if not all_questions:
             update_pipeline_step(
@@ -80,11 +84,15 @@ async def merge_dedupe_node(
         if isinstance(jd_obj, dict):
             jd_obj = ParsedJD.model_validate(jd_obj)
 
+        print(f"      → deduplicating: {len(all_questions)} → {len(deduplicated)} unique questions", flush=True)
+
         # Check coverage (which requirements have questions)
         coverage_gaps = _check_coverage(deduplicated, jd_obj)
+        print(f"      → coverage: {len(jd_obj.requirements) - len(coverage_gaps)}/{len(jd_obj.requirements)} JD requirements covered", flush=True)
 
         # Rerank by relevance to JD
         reranked = await _rerank_questions(deduplicated, jd_obj)
+        print(f"      → reranked {len(reranked)} questions by JD relevance", flush=True)
 
         # Log completion
         update_pipeline_step(
@@ -99,10 +107,12 @@ async def merge_dedupe_node(
         )
 
         return {
-            "status": "running",
-            "merged_questions": [q.model_dump() if isinstance(q, GeneratedQuestion) else q for q in reranked],
+            "merged_questions": MergedQuestionSet(
+                total_questions=len(reranked),
+                questions=[GeneratedQuestion(**q) if isinstance(q, dict) else q for q in reranked],
+                coverage={}
+            ),
             "coverage_gaps": coverage_gaps,
-            "error_message": None,
         }
 
     except Exception as e:
@@ -120,7 +130,6 @@ async def merge_dedupe_node(
             db_path=db_path,
         )
         return {
-            "status": "failed",
             "error_message": error_msg,
         }
 
