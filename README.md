@@ -41,7 +41,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 
 4. **Run dev server**
    ```bash
-   uvicorn src.api.app:app --reload
+   uvicorn src.api.app:app --reload --port 8000
    ```
 
 5. **Access API** at `http://localhost:8000/docs`
