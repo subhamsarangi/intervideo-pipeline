@@ -1,0 +1,32 @@
+Full job description
+Job Description:
+
+We are seeking an AI Engineer to design build and deploy enterprise grade Generative AI applications leveraging cloud native architectures and modern LLM ecosystems
+The ideal candidate will have strong data engineering foundations combined with expertise in Retrieval Augmented Generation RAG agentic workflows and AI service integration
+
+Key Responsibilities:
+
+Design and develop GenAI applications using Python and enterprise LLM platforms
+Build scalable data pipelines for structured and unstructured data processing
+Implement Retrieval Augmented Generation RAG systems and vector based search solutions
+Integrate LLMs with enterprise applications through APIs and workflows
+Develop cloud native AI services on AWS Azure GCP Databricks DBRX or Snowflake
+Create agent based solutions using LangChain and LangGraph
+Ensure data quality governance and security compliance across AI workflows
+Optimize performance scalability and reliability of AI solutions
+
+Technical Requirements:
+
+Core Skills
+Python SQL ETL ELT Data Modeling Data Quality Cloud native Development API Integration Data Engineering ETL Document Processing Workflow design knowledge of LLM development RAG Prompt Engineering AI Coding Assistants
+Advanced Skills
+RAG Data Pipelines LLM Data Integration AI Service Integration Scalable AI Deployments Agent Orchestration Tool Calling LangGraph LangChain
+
+Additional Responsibilities:
+
+Experience with Hugging Face LangChain OpenAI Anthropic Gemini or open source LLMs
+Familiarity with knowledge graphs and semantic search
+Experience building production grade GenAI solutions
+
+Preferred Skills:
+Technology->AI-Data science->Machine Learning,Technology->AI-Generative AI->Artificial Intelligence - BASIC,Technology->AI-Generative AI->Generative AI for Data Analytics

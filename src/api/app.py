@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import cv, pipeline
+from .routes import cv, jd, pipeline
 
 app = FastAPI(title="Intervideo-Pipeline API", version="1.0.0")
 
@@ -16,6 +16,7 @@ app.add_middleware(
 # Routes
 app.include_router(pipeline.router)
 app.include_router(cv.router)
+app.include_router(jd.router)
 
 @app.get("/")
 def read_root():

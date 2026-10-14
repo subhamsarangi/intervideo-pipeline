@@ -61,6 +61,16 @@ curl -F "file=@cv.pdf" http://localhost:8000/cv/upload
 
 Use `GET /cv` to list CVs, `GET /cv/{cv_id}` to retrieve one CV, and `GET /cv/{cv_id}/status` to check parsing status.
 
+## API: Job Description
+
+`POST /jd` accepts multipart form data with `source_type` set to `pasted`, `url`, or `file`; provide `text`, `url`, or `file` respectively. File uploads support PDF, TXT, and HTML (maximum 10 MB). Parsing runs in the background. Use `GET /jd`, `GET /jd/{jd_id}`, and `GET /jd/{jd_id}/status` to retrieve descriptions and parsing status.
+
+```sh
+curl -F "source_type=pasted" -F "text=Senior engineer; Python and API experience required" http://localhost:8000/jd
+curl -F "source_type=url" -F "url=https://example.com/jobs/role" http://localhost:8000/jd
+curl -F "source_type=file" -F "file=@job-description.pdf" http://localhost:8000/jd
+```
+
 ## Project Structure
 
 ```

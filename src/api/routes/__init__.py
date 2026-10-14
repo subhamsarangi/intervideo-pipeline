@@ -1,5 +1,5 @@
 """API route handlers"""
 
-from . import cv, pipeline
+from . import cv, jd, pipeline
 
-__all__ = ["cv", "pipeline"]
+__all__ = ["cv", "jd", "pipeline"]
