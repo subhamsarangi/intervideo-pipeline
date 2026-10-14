@@ -71,6 +71,14 @@ curl -F "source_type=url" -F "url=https://example.com/jobs/role" http://localhos
 curl -F "source_type=file" -F "file=@job-description.pdf" http://localhost:8000/jd
 ```
 
+## API: Start Pipeline
+
+`POST /pipeline/start` requires completed CV and JD records. It returns `run_id` and starts processing in the background.
+
+```sh
+curl -X POST http://localhost:8000/pipeline/start -H "Content-Type: application/json" -d "{\"cv_id\":1,\"jd_id\":1}"
+```
+
 ## Project Structure
 
 ```

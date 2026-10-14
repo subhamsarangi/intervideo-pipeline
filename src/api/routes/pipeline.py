@@ -1,13 +1,101 @@
 """Pipeline API routes"""
-from fastapi import APIRouter, HTTPException
+import logging
 from typing import List, Dict, Any
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, Field
+
 from ...database.db import (
+    create_pipeline_run,
+    get_cv,
+    get_db_path,
+    get_jd,
     get_pipeline_run,
     list_questions_by_run,
     get_pipeline_steps,
+    update_pipeline_run_status,
 )
+from ...models.pipeline import PipelineState
+from ...pipeline.graph import run_pipeline
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
+logger = logging.getLogger(__name__)
+
+
+class PipelineStartRequest(BaseModel):
+    cv_id: int = Field(gt=0)
+    jd_id: int = Field(gt=0)
+    prompt_version: str | None = None
+
+
+async def _run_pipeline_in_background(
+    run_id: int,
+    cv_id: int,
+    jd_id: int,
+    prompt_version: str | None,
+    db_path: str,
+) -> None:
+    """Execute pipeline and persist an error status if graph execution fails."""
+    update_pipeline_run_status(run_id, "running", db_path=db_path)
+    state = PipelineState(
+        run_id=run_id,
+        cv_id=cv_id,
+        jd_id=jd_id,
+        prompt_version=prompt_version,
+        db_path=db_path,
+        status="running",
+    )
+    try:
+        await run_pipeline(state, db_path)
+    except Exception as err:
+        logger.exception("Pipeline run %s failed", run_id)
+        update_pipeline_run_status(
+            run_id,
+            status="failed",
+            error_message=str(err),
+            db_path=db_path,
+        )
+
+
+@router.post("/start", status_code=202)
+async def start_pipeline(
+    request: PipelineStartRequest,
+    background_tasks: BackgroundTasks,
+) -> Dict[str, int | str]:
+    """Create a pipeline run and execute it in the background."""
+    db_path = get_db_path()
+    cv = get_cv(request.cv_id, db_path=db_path)
+    if cv is None:
+        raise HTTPException(status_code=404, detail="CV not found")
+    if cv["status"] != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"CV is not ready; current status: {cv['status']}",
+        )
+
+    jd = get_jd(request.jd_id, db_path=db_path)
+    if jd is None:
+        raise HTTPException(status_code=404, detail="JD not found")
+    if jd["status"] != "completed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"JD is not ready; current status: {jd['status']}",
+        )
+
+    run_id = create_pipeline_run(
+        request.cv_id,
+        request.jd_id,
+        request.prompt_version,
+        db_path=db_path,
+    )
+    background_tasks.add_task(
+        _run_pipeline_in_background,
+        run_id,
+        request.cv_id,
+        request.jd_id,
+        request.prompt_version,
+        db_path,
+    )
+    return {"run_id": run_id, "status": "pending"}
 
 
 @router.get("/{run_id}")
