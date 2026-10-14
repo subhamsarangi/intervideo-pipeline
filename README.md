@@ -51,6 +51,14 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
    uv run python run_full_pipeline.py
    ```
 
+## API: CV Upload
+
+`POST /cv/upload` accepts a PDF as multipart field `file` (maximum 10 MB), stores a pending CV record, and starts parsing in the background. Response includes `cv_id` and initial `status`.
+
+```sh
+curl -F "file=@cv.pdf" http://localhost:8000/cv/upload
+```
+
 ## Project Structure
 
 ```
