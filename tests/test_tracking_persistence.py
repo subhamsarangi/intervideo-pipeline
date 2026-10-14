@@ -157,7 +157,7 @@ class TestTrackingPersistence:
 
     def test_cost_accuracy_validation(self, test_db):
         """Test cost calculation accuracy against known token pricing"""
-        # Known: gpt-5.4-nano = $0.075 per 1M input, $0.30 per 1M output
+        # Known: gpt-5.4-nano = $0.15 per 1M input, $0.60 per 1M output
         from src.utils.llm_tracking import MODEL_COSTS
 
         # Test calculation
@@ -169,9 +169,9 @@ class TestTrackingPersistence:
             output_tokens * MODEL_COSTS[model]["output"] / 1_000_000
         )
 
-        # Expected: (1000 * 0.075 / 1M) + (500 * 0.30 / 1M) = 0.000225
+        # Expected: (1000 * 0.15 / 1M) + (500 * 0.60 / 1M) = 0.00045
         assert (
-            abs(expected_cost - 0.000225) < 0.000001
+            abs(expected_cost - 0.00045) < 0.000001
         ), f"Cost calculation incorrect: {expected_cost}"
 
         print(f"\n✓ Cost calculation validation")

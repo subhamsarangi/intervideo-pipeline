@@ -158,6 +158,9 @@ async def get_run_operations(run_id: int) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="Pipeline run not found")
 
     operations = list_llm_operations_by_run(run_id)
+    for operation in operations:
+        operation["cost_usd"] = round(operation["cost_usd"], 10)
+
     return {
         "run_id": run_id,
         "total_cost_usd": round(

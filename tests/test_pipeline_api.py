@@ -140,8 +140,8 @@ def test_get_pipeline_operations_returns_usage_and_cost(client):
     increment_llm_calls(
         operation="generate_questions",
         model="gpt-5.4-nano",
-        input_tokens=1000,
-        output_tokens=500,
+        input_tokens=2344,
+        output_tokens=1895,
         run_id=run_id,
         step_id=step_id,
         db_path=db_path,
@@ -158,13 +158,14 @@ def test_get_pipeline_operations_returns_usage_and_cost(client):
     assert operation["step_id"] == step_id
     assert operation["operation"] == "generate_questions"
     assert operation["model"] == "gpt-5.4-nano"
-    assert operation["input_tokens"] == 1000
-    assert operation["output_tokens"] == 500
+    assert operation["input_tokens"] == 2344
+    assert operation["output_tokens"] == 1895
     expected_cost = (
-        1000 * MODEL_COSTS["gpt-5.4-nano"]["input"]
-        + 500 * MODEL_COSTS["gpt-5.4-nano"]["output"]
+        2344 * MODEL_COSTS["gpt-5.4-nano"]["input"]
+        + 1895 * MODEL_COSTS["gpt-5.4-nano"]["output"]
     ) / 1_000_000
-    assert operation["cost_usd"] == pytest.approx(expected_cost)
+    assert expected_cost == pytest.approx(0.0014886)
+    assert operation["cost_usd"] == 0.0014886
     with get_connection(db_path) as conn:
         total_cost = conn.execute(
             "SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_operations WHERE run_id = ?",

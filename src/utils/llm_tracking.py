@@ -9,14 +9,10 @@ from src.database.db import get_connection
 # Model pricing (per 1M tokens, 2026 rates)
 MODEL_COSTS = {
     "gpt-5.4-nano": {
-        "input": 0.075,  # $0.075 per 1M input tokens
-        "output": 0.30,  # $0.30 per 1M output tokens
+        "input": 0.15,  # $0.15 per 1M input tokens
+        "output": 0.60,  # $0.60 per 1M output tokens
     },
     "gpt-5.4-mini": {
-        "input": 0.15,
-        "output": 0.60,
-    },
-    "gpt-5.4-nano": {
         "input": 0.15,
         "output": 0.60,
     },
