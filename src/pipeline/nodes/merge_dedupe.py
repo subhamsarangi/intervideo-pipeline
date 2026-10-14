@@ -75,7 +75,9 @@ async def merge_dedupe_node(
             }
 
         # Deduplicate via LLM semantic clustering
-        deduplicated = await _deduplicate_questions(all_questions)
+        deduplicated = await _deduplicate_questions(
+            all_questions, run_id=run_id, step_id=step_id, db_path=db_path
+        )
 
         # Get JD for coverage check
         jd_obj = state_dict.get("jd")
@@ -91,7 +93,9 @@ async def merge_dedupe_node(
         print(f"      → coverage: {len(jd_obj.requirements) - len(coverage_gaps)}/{len(jd_obj.requirements)} JD requirements covered", flush=True)
 
         # Rerank by relevance to JD
-        reranked = await _rerank_questions(deduplicated, jd_obj)
+        reranked = await _rerank_questions(
+            deduplicated, jd_obj, run_id=run_id, step_id=step_id, db_path=db_path
+        )
         print(f"      → reranked {len(reranked)} questions by JD relevance", flush=True)
 
         # Log completion
@@ -134,7 +138,12 @@ async def merge_dedupe_node(
         }
 
 
-async def _deduplicate_questions(questions: List[Dict]) -> List[GeneratedQuestion]:
+async def _deduplicate_questions(
+    questions: List[Dict],
+    run_id: Optional[int] = None,
+    step_id: Optional[int] = None,
+    db_path: Optional[str] = None,
+) -> List[GeneratedQuestion]:
     """
     Deduplicate questions using LLM semantic clustering.
 
@@ -163,6 +172,9 @@ async def _deduplicate_questions(questions: List[Dict]) -> List[GeneratedQuestio
             model="text-embedding-3-small",
             input_tokens=embeddings_response.usage.prompt_tokens,
             output_tokens=0,
+            run_id=run_id,
+            step_id=step_id,
+            db_path=db_path,
         )
 
     # Compute similarity matrix
@@ -231,7 +243,13 @@ def _check_coverage(questions: List[GeneratedQuestion], jd: ParsedJD) -> List[Di
     return uncovered
 
 
-async def _rerank_questions(questions: List[GeneratedQuestion], jd: ParsedJD) -> List[GeneratedQuestion]:
+async def _rerank_questions(
+    questions: List[GeneratedQuestion],
+    jd: ParsedJD,
+    run_id: Optional[int] = None,
+    step_id: Optional[int] = None,
+    db_path: Optional[str] = None,
+) -> List[GeneratedQuestion]:
     """
     Rerank questions by relevance to JD.
 
@@ -259,6 +277,9 @@ async def _rerank_questions(questions: List[GeneratedQuestion], jd: ParsedJD) ->
             model="text-embedding-3-small",
             input_tokens=embeddings_response.usage.prompt_tokens,
             output_tokens=0,
+            run_id=run_id,
+            step_id=step_id,
+            db_path=db_path,
         )
 
     jd_embedding = np.array(embeddings[0], dtype=np.float32)

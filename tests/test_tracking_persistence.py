@@ -11,9 +11,13 @@ from src.database.db import (
     get_jd_cost,
     get_average_costs,
     display_cost_report,
+    create_pipeline_run,
+    create_pipeline_step,
+    get_connection,
 )
 from src.parsers.cv_parser import parse_cv
 from src.parsers.jd_parser import parse_jd
+from src.utils.llm_tracking import increment_llm_calls, MODEL_COSTS
 import os
 
 
@@ -28,6 +32,50 @@ def test_db():
 
 
 class TestTrackingPersistence:
+    def test_pipeline_operation_tracking_persistence(self, test_db):
+        cv_id = create_cv("CV", "text", test_db)
+        jd_id = create_jd("JD", "text", "pasted", None, test_db)
+        run_id = create_pipeline_run(cv_id, jd_id, "test", test_db)
+        step_id = create_pipeline_step(run_id, "test_step", test_db)
+
+        increment_llm_calls(
+            operation="test_operation",
+            model="gpt-5.4-nano",
+            input_tokens=1000,
+            output_tokens=500,
+            run_id=run_id,
+            step_id=step_id,
+            db_path=test_db,
+        )
+        increment_llm_calls(
+            operation="unscoped_operation",
+            model="gpt-5.4-nano",
+            run_id=None,
+            db_path=test_db,
+        )
+
+        with get_connection(test_db) as conn:
+            rows = conn.execute(
+                "SELECT run_id, step_id, operation, model, input_tokens, "
+                "output_tokens, cost_usd FROM llm_operations WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+
+        expected_cost = (
+            1000 * MODEL_COSTS["gpt-5.4-nano"]["input"]
+            + 500 * MODEL_COSTS["gpt-5.4-nano"]["output"]
+        ) / 1_000_000
+        assert len(rows) == 1
+        assert tuple(rows[0][:6]) == (
+            run_id,
+            step_id,
+            "test_operation",
+            "gpt-5.4-nano",
+            1000,
+            500,
+        )
+        assert rows[0]["cost_usd"] == pytest.approx(expected_cost)
+
     @pytest.mark.asyncio
     async def test_cv_tracking_persistence(self, test_db, tracker):
         """Test CV parsing saves tracking data to database"""

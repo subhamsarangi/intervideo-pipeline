@@ -1,6 +1,6 @@
 """LLM Judge evaluation node: scores and persists questions to database"""
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import instructor
 from pydantic import BaseModel, Field
@@ -28,7 +28,15 @@ class JudgeResponseModel(BaseModel):
     question_scores: List[QuestionScore] = Field(..., description="Scores for each question")
 
 
-async def _score_batch(client, batch: List[Dict], jd_dict: Dict, cv_dict: Dict) -> Dict[int, QuestionScore]:
+async def _score_batch(
+    client,
+    batch: List[Dict],
+    jd_dict: Dict,
+    cv_dict: Dict,
+    run_id: int,
+    step_id: int,
+    db_path: Optional[str],
+) -> Dict[int, QuestionScore]:
     """Call the judge once. Returns {1-based question index: QuestionScore}."""
     user_prompt = get_judge_user_prompt(batch, jd_dict, cv_dict)
 
@@ -50,6 +58,9 @@ async def _score_batch(client, batch: List[Dict], jd_dict: Dict, cv_dict: Dict) 
             model=JUDGE_MODEL,
             input_tokens=usage.prompt_tokens,
             output_tokens=usage.completion_tokens,
+            run_id=run_id,
+            step_id=step_id,
+            db_path=db_path,
         )
 
     by_index: Dict[int, QuestionScore] = {}
@@ -155,7 +166,9 @@ async def judge_evaluation_node(
             last_error = None
             for _ in range(MAX_ATTEMPTS):
                 try:
-                    got = await _score_batch(client, batch_dicts, jd_dict, cv_dict)
+                    got = await _score_batch(
+                        client, batch_dicts, jd_dict, cv_dict, run_id, step_id, db_path
+                    )
                     print(f"            scored {len(got)}/{len(batch)}", flush=True)
                     for idx, s in got.items():
                         scores.setdefault(idx, s)

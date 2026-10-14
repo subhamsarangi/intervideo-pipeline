@@ -135,6 +135,9 @@ async def skill_questions_node(
                         model="gpt-5.4-nano",
                         input_tokens=response.usage.prompt_tokens,
                         output_tokens=response.usage.completion_tokens,
+                        run_id=run_id,
+                        step_id=step_id,
+                        db_path=db_path,
                     )
 
                 # Add source info to each question

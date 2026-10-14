@@ -223,7 +223,12 @@ async def triage_node(state: Union[PipelineState, Dict[str, Any]]) -> Dict[str, 
         # 4. Generate embeddings in batches
         all_texts_to_embed = jd_texts + proj_texts + skill_texts
         print(f"      → embedding {len(all_texts_to_embed)} items (JD: {len(jd_texts)}, projects: {len(proj_texts)}, skills: {len(skill_texts)}) with OpenAI...", flush=True)
-        all_embeddings = await get_embeddings_batch(all_texts_to_embed)
+        all_embeddings = await get_embeddings_batch(
+            all_texts_to_embed,
+            run_id=run_id,
+            step_id=step_id,
+            db_path=db_path,
+        )
 
         jd_len = len(jd_texts)
         proj_len = len(proj_texts)

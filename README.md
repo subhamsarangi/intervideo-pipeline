@@ -15,7 +15,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 
 **Backend**: Python 3.11+ + FastAPI + Uvicorn  
 **Parsing**: LlamaParse (LlamaCloud API)  
-**LLM**: OpenAI GPT-4o via LangGraph + Instructor  
+**LLM**: OpenAI GPT via LangGraph + Instructor  
 **Search**: Tavily API for candidate enrichment  
 **Database**: SQLite  
 **Testing**: pytest + pytest-asyncio
@@ -35,16 +35,21 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
    ```
 
 3. **Initialize database**
-   ```bash
+   ```sh
    python -m src.database.db
    ```
 
 4. **Run dev server**
-   ```bash
+   ```sh
    uvicorn src.api.app:app --reload --port 8000
    ```
 
 5. **Access API** at `http://localhost:8000/docs`
+
+6. **Run Full Pipeline**
+   ```sh
+   uv run python run_full_pipeline.py
+   ```
 
 ## Project Structure
 

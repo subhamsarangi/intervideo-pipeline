@@ -81,6 +81,9 @@ async def get_embeddings_batch(
     dimensions: Optional[int] = None,
     batch_size: int = 100,
     client: Optional[AsyncOpenAI] = None,
+    run_id: Optional[int] = None,
+    step_id: Optional[int] = None,
+    db_path: Optional[str] = None,
 ) -> List[List[float]]:
     """
     Generate embeddings for a list of texts in batches.
@@ -120,6 +123,9 @@ async def get_embeddings_batch(
                 model=model,
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=0,
+                run_id=run_id,
+                step_id=step_id,
+                db_path=db_path,
             )
         # Sort by index to ensure order is preserved
         chunk_embeddings = [item.embedding for item in sorted(response.data, key=lambda x: x.index)]

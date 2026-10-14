@@ -3,6 +3,8 @@
 from typing import Optional, Dict, List
 from contextlib import contextmanager
 
+from src.database.db import get_connection
+
 
 # Model pricing (per 1M tokens, 2026 rates)
 MODEL_COSTS = {
@@ -152,10 +154,44 @@ def increment_llm_calls(
     model: str = "gpt-5.4-nano",
     input_tokens: int = 0,
     output_tokens: int = 0,
+    run_id: Optional[int] = None,
+    step_id: Optional[int] = None,
+    db_path: Optional[str] = None,
 ):
-    """Increment global LLM call counter with actual token counts"""
+    """Track call in memory and persist run-scoped usage when run_id is provided."""
     tracker = get_tracker()
     tracker.increment(operation, model, input_tokens, output_tokens)
+
+    if run_id is None:
+        return
+
+    costs = MODEL_COSTS.get(model, {})
+    if "per_call" in costs:
+        cost_usd = costs["per_call"]
+    else:
+        cost_usd = (
+            input_tokens * costs.get("input", 0.0)
+            + output_tokens * costs.get("output", 0.0)
+        ) / 1_000_000
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO llm_operations (
+                run_id, step_id, operation, model,
+                input_tokens, output_tokens, cost_usd
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                step_id,
+                operation,
+                model,
+                input_tokens,
+                output_tokens,
+                cost_usd,
+            ),
+        )
 
 
 def get_llm_call_count() -> int:

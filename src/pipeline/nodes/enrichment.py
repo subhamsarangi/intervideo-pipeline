@@ -187,6 +187,9 @@ async def enrichment_node(
                 increment_llm_calls(
                     operation=f"tavily_search:{item}",
                     model="tavily-search",
+                    run_id=run_id,
+                    step_id=step_id,
+                    db_path=db_path,
                 )
 
                 if not results:
