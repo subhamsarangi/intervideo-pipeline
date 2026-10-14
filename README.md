@@ -59,6 +59,8 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
 curl -F "file=@cv.pdf" http://localhost:8000/cv/upload
 ```
 
+Use `GET /cv` to list CVs, `GET /cv/{cv_id}` to retrieve one CV, and `GET /cv/{cv_id}/status` to check parsing status.
+
 ## Project Structure
 
 ```

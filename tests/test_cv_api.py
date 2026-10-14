@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.api import app as api_module
 from src.api.routes import cv as cv_routes
-from src.database.db import get_cv, init_db
+from src.database.db import create_cv, get_cv, init_db, update_cv_status
 
 
 @pytest.fixture
@@ -69,6 +69,45 @@ def test_upload_cv_records_background_parse_failure(client, monkeypatch):
     assert cv["status"] == "failed"
     assert cv["error_message"] == "parser unavailable"
     assert list(upload_dir.iterdir()) == []
+
+
+def test_get_cv_list_detail_and_status(client):
+    test_client, db_path, _ = client
+    cv_id = create_cv("candidate.pdf", "Raw CV", db_path=db_path)
+    update_cv_status(
+        cv_id,
+        "completed",
+        parsed_data={"name": "Test Candidate", "skills": []},
+        db_path=db_path,
+    )
+
+    list_response = test_client.get("/cv")
+    detail_response = test_client.get(f"/cv/{cv_id}")
+    status_response = test_client.get(f"/cv/{cv_id}/status")
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == cv_id
+    assert list_response.json()[0]["parsed_data"] == {
+        "name": "Test Candidate",
+        "skills": [],
+    }
+    assert detail_response.status_code == 200
+    assert detail_response.json()["raw_text"] == "Raw CV"
+    assert detail_response.json()["parsed_data"]["name"] == "Test Candidate"
+    assert status_response.status_code == 200
+    assert status_response.json()["cv_id"] == cv_id
+    assert status_response.json()["status"] == "completed"
+    assert status_response.json()["error_message"] is None
+
+
+@pytest.mark.parametrize("endpoint", ["/cv/999", "/cv/999/status"])
+def test_get_cv_returns_404_for_missing_id(client, endpoint):
+    test_client, _, _ = client
+
+    response = test_client.get(endpoint)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "CV not found"
 
 
 @pytest.mark.parametrize(
