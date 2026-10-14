@@ -1,8 +1,22 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from ..database.migrate import migrate_up
 from .routes import cv, jd, pipeline
 
-app = FastAPI(title="Intervideo-Pipeline API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    migrate_up()
+    yield
+
+
+app = FastAPI(
+    title="Intervideo-Pipeline API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 # CORS
 app.add_middleware(

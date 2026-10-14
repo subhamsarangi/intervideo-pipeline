@@ -89,9 +89,7 @@ async def _wait_for_status(
                     f"   {label}: {spinner[frame % len(spinner)]} "
                     f"checking API ({elapsed}s)"
                 )
-                sys.stdout.write(
-                    f"\r{line}{' ' * max(0, line_width - len(line))}"
-                )
+                sys.stdout.write(f"\r{line}{' ' * max(0, line_width - len(line))}")
                 sys.stdout.flush()
                 line_width = max(line_width, len(line))
                 frame += 1
@@ -104,9 +102,7 @@ async def _wait_for_status(
         if is_tty:
             elapsed = int(time.monotonic() - started_at)
             line = f"   {label}: {status} ({elapsed}s)"
-            sys.stdout.write(
-                f"\r{line}{' ' * max(0, line_width - len(line))}"
-            )
+            sys.stdout.write(f"\r{line}{' ' * max(0, line_width - len(line))}")
             sys.stdout.flush()
             line_width = max(line_width, len(line))
         if status == "completed":
@@ -130,9 +126,7 @@ async def _wait_for_status(
             if is_tty:
                 line = f"   {label}: timed out"
                 print(f"\r{line}{' ' * max(0, line_width - len(line))}")
-            raise TimeoutError(
-                f"Timed out waiting for {label} after {timeout:g}s"
-            )
+            raise TimeoutError(f"Timed out waiting for {label} after {timeout:g}s")
         await asyncio.sleep(poll_interval)
 
 
@@ -201,7 +195,9 @@ async def run_full_pipeline(
 
 async def _async_main(args: argparse.Namespace) -> int:
     timeout = httpx.Timeout(60.0, connect=10.0)
-    async with httpx.AsyncClient(base_url=args.api_url.rstrip("/"), timeout=timeout) as client:
+    async with httpx.AsyncClient(
+        base_url=args.api_url.rstrip("/"), timeout=timeout
+    ) as client:
         return await run_full_pipeline(
             client,
             args.cv,
@@ -215,7 +211,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument(
-        "--cv", type=Path, default=Path("tests/fixtures/cv_jd_testing_doc1.pdf")
+        "--cv", type=Path, default=Path("tests/fixtures/cv_testing_doc1.pdf")
     )
     parser.add_argument(
         "--jd", type=Path, default=Path("tests/fixtures/jd_testing_doc1.pdf")
@@ -227,7 +223,13 @@ def main() -> int:
         parser.error("--poll-interval and --timeout must be greater than zero")
     try:
         return asyncio.run(_async_main(args))
-    except (httpx.HTTPError, RuntimeError, TimeoutError, FileNotFoundError, ValueError) as err:
+    except (
+        httpx.HTTPError,
+        RuntimeError,
+        TimeoutError,
+        FileNotFoundError,
+        ValueError,
+    ) as err:
         detail = str(err).strip() or repr(err) or type(err).__name__
         print(f"\nERROR [{type(err).__name__}]: {detail}", file=sys.stderr)
         return 1

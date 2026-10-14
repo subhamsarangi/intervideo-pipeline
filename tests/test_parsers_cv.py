@@ -12,7 +12,7 @@ class TestCVParser:
     async def test_parse_cv_real_file(self, tracker):
         """Test parsing real CV file with progress tracking"""
         reset_tracker()
-        cv_path = Path("tests/fixtures/cv_jd_testing_doc1.pdf")
+        cv_path = Path("tests/fixtures/cv_testing_doc1.pdf")
 
         with tracker("CV Parsing") as bar:
             bar.update(10, "uploading")
@@ -29,7 +29,7 @@ class TestCVParser:
     async def test_parse_cv_full_pipeline(self, tracker):
         """Test full CV parsing pipeline with structured extraction"""
         reset_tracker()
-        cv_path = Path("tests/fixtures/cv_jd_testing_doc1.pdf")
+        cv_path = Path("tests/fixtures/cv_testing_doc1.pdf")
 
         with tracker("CV Full Parse", 100) as bar:
             bar.update(20, "uploading")

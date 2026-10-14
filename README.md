@@ -43,6 +43,7 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
    ```sh
    uvicorn src.api.app:app --reload --port 8000
    ```
+   API startup automatically applies pending SQLite migrations.
 
 5. **Access API** at `http://localhost:8000/docs`
 

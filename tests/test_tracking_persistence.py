@@ -83,7 +83,7 @@ class TestTrackingPersistence:
         cv_id = create_cv("Test CV", "raw text", test_db)
 
         # Parse CV with tracking
-        cv_path = Path("tests/fixtures/cv_jd_testing_doc1.pdf")
+        cv_path = Path("tests/fixtures/cv_testing_doc1.pdf")
 
         with tracker("CV Tracking Test") as bar:
             bar.update(20, "parsing")

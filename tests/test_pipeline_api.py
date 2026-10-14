@@ -1,6 +1,7 @@
 """Tests for pipeline API routes."""
 
 import asyncio
+import sqlite3
 from unittest.mock import AsyncMock
 
 import pytest
@@ -110,6 +111,25 @@ def test_background_startup_failure_is_recorded_not_left_pending(monkeypatch):
         ),
     ]
     execute.assert_not_awaited()
+
+
+def test_api_startup_migrates_existing_database_missing_pipeline_cost(
+    tmp_path, monkeypatch
+):
+    db_path = str(tmp_path / "legacy_api.db")
+    init_db(db_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("ALTER TABLE pipeline_runs DROP COLUMN total_cost_usd")
+    monkeypatch.setenv("DATABASE_PATH", db_path)
+
+    with TestClient(api_module.app) as test_client:
+        assert test_client.get("/health").json() == {"status": "ok"}
+
+    with sqlite3.connect(db_path) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(pipeline_runs)")
+        }
+    assert "total_cost_usd" in columns
 
 
 def test_get_pipeline_operations_returns_usage_and_cost(client):
