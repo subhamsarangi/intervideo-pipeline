@@ -297,7 +297,8 @@ def list_pipeline_runs(
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM pipeline_runs ORDER BY created_at DESC LIMIT ?", (limit,)
+            "SELECT * FROM pipeline_runs ORDER BY created_at DESC, id DESC LIMIT ?",
+            (limit,),
         )
         return [dict(row) for row in cursor.fetchall()]
 

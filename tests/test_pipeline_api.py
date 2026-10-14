@@ -194,6 +194,43 @@ def test_get_pipeline_operations_returns_404_for_missing_run(client):
     assert response.json()["detail"] == "Pipeline run not found"
 
 
+def test_get_pipeline_history_returns_recent_runs_newest_first(client):
+    test_client, db_path = client
+    cv_id, jd_id = _create_ready_inputs(db_path)
+    earlier_run = create_pipeline_run(cv_id, jd_id, "v1", db_path=db_path)
+    later_run = create_pipeline_run(cv_id, jd_id, "v2", db_path=db_path)
+
+    response = test_client.get("/pipeline/history")
+
+    assert response.status_code == 200
+    runs = response.json()
+    assert [run["id"] for run in runs[:2]] == [later_run, earlier_run]
+    assert runs[0]["prompt_version"] == "v2"
+
+
+def test_get_pipeline_history_applies_limit(client):
+    test_client, db_path = client
+    cv_id, jd_id = _create_ready_inputs(db_path)
+    run_ids = [
+        create_pipeline_run(cv_id, jd_id, db_path=db_path) for _ in range(3)
+    ]
+
+    response = test_client.get("/pipeline/history?limit=2")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert [run["id"] for run in response.json()] == list(reversed(run_ids[-2:]))
+
+
+@pytest.mark.parametrize("limit", ["0", "101", "not-a-number"])
+def test_get_pipeline_history_rejects_invalid_limit(client, limit):
+    test_client, _ = client
+
+    response = test_client.get(f"/pipeline/history?limit={limit}")
+
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize(
     ("cv_status", "jd_status", "expected_detail"),
     [

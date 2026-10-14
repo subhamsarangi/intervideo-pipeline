@@ -1,7 +1,7 @@
 """Pipeline API routes"""
 import logging
 from typing import List, Dict, Any
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ...database.db import (
@@ -11,6 +11,7 @@ from ...database.db import (
     get_jd,
     get_pipeline_run,
     list_llm_operations_by_run,
+    list_pipeline_runs,
     list_questions_by_run,
     get_pipeline_steps,
     update_pipeline_run_status,
@@ -97,6 +98,14 @@ async def start_pipeline(
         db_path,
     )
     return {"run_id": run_id, "status": "pending"}
+
+
+@router.get("/history")
+async def get_pipeline_history(
+    limit: int = Query(default=50, ge=1, le=100),
+) -> List[Dict[str, Any]]:
+    """List recent pipeline runs, newest first."""
+    return list_pipeline_runs(limit=limit)
 
 
 @router.get("/{run_id}")

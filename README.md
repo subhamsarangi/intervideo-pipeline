@@ -72,7 +72,10 @@ curl -F "source_type=file" -F "file=@job-description.pdf" http://localhost:8000/
 ```sh
 curl -X POST http://localhost:8000/pipeline/start -H "Content-Type: application/json" -d "{\"cv_id\":1,\"jd_id\":1}"
 curl http://localhost:8000/pipeline/1/operations
+curl http://localhost:8000/pipeline/history?limit=10
 ```
+
+`GET /pipeline/history` lists recent runs, newest first (default 50; limit range 1–100).
 
 ## Project Structure
 
@@ -86,13 +89,11 @@ pipeline/
 │   ├── pipeline/
 │   │   └── nodes/        # LangGraph nodes (question generation, merge, judge, etc.)
 │   └── utils/            # Security, embeddings, tracking
-├── tests/                # 117 tests
+├── tests/
 ├── scripts/              # DB seed/cleanup
 ├── demo_*.py             # Live demos
-├── outputs/              # Generated CV markdown
-└── uploads/              # Uploaded CVs/JDs
-```
-
+├── outputs/              # Generated markdown
+└── uploads/
 
 ## Testing
 
