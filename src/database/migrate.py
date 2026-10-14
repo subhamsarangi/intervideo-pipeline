@@ -34,6 +34,7 @@ def migrate_up(db_path: Optional[str] = None) -> None:
     migrations = {
         "001_init_schema": init_schema,
         "002_add_llm_tracking": add_llm_tracking_columns,
+        "003_add_llm_operations": add_llm_operations_table,
     }
 
     # Apply pending migrations
@@ -105,6 +106,29 @@ def add_llm_tracking_columns(conn: sqlite3.Connection) -> None:
         )
     except sqlite3.OperationalError:
         pass
+
+
+def add_llm_operations_table(conn: sqlite3.Connection) -> None:
+    """003: Store per-operation LLM usage and cost"""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS llm_operations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            step_id INTEGER,
+            operation TEXT NOT NULL,
+            model TEXT NOT NULL,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cost_usd REAL NOT NULL DEFAULT 0.0,
+            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (run_id) REFERENCES pipeline_runs(id),
+            FOREIGN KEY (step_id) REFERENCES pipeline_steps(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_llm_operations_run ON llm_operations(run_id);
+        CREATE INDEX IF NOT EXISTS idx_llm_operations_step ON llm_operations(step_id);
+        """
+    )
 
 
 def migrate_down(db_path: Optional[str] = None) -> None:

@@ -282,3 +282,48 @@ class TestMigrations:
 
         # Cleanup
         os.remove(db_path)
+
+    def test_llm_operations_migration_on_existing_database(self, tmp_path):
+        """Add operation tracking table to a database with prior migrations."""
+        db_path = str(tmp_path / "legacy.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE migrations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO migrations (name) VALUES
+                    ('001_init_schema'),
+                    ('002_add_llm_tracking');
+                CREATE TABLE pipeline_runs (id INTEGER PRIMARY KEY);
+                CREATE TABLE pipeline_steps (id INTEGER PRIMARY KEY);
+                """
+            )
+
+        migrate_up(db_path)
+        migrate_up(db_path)
+
+        with sqlite3.connect(db_path) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(llm_operations)")
+            }
+            assert columns == {
+                "id",
+                "run_id",
+                "step_id",
+                "operation",
+                "model",
+                "input_tokens",
+                "output_tokens",
+                "cost_usd",
+                "timestamp",
+            }
+            applied = {
+                row[0] for row in conn.execute("SELECT name FROM migrations")
+            }
+            assert "003_add_llm_operations" in applied
+            assert conn.execute(
+                "SELECT COUNT(*) FROM migrations WHERE name = '003_add_llm_operations'"
+            ).fetchone()[0] == 1

@@ -64,6 +64,23 @@ CREATE TABLE IF NOT EXISTS pipeline_steps (
     FOREIGN KEY (run_id) REFERENCES pipeline_runs(id)
 );
 
+-- Per-request LLM usage and cost
+CREATE TABLE IF NOT EXISTS llm_operations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    step_id INTEGER,
+    operation TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0.0,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES pipeline_runs(id),
+    FOREIGN KEY (step_id) REFERENCES pipeline_steps(id)
+);
+CREATE INDEX IF NOT EXISTS idx_llm_operations_run ON llm_operations(run_id);
+CREATE INDEX IF NOT EXISTS idx_llm_operations_step ON llm_operations(step_id);
+
 -- Generated Questions
 CREATE TABLE IF NOT EXISTS questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
