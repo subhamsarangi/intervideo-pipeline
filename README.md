@@ -51,30 +51,22 @@ Python FastAPI backend for InterVideo. Parses CVs and job descriptions, generate
    uv run python run_full_pipeline.py
    ```
 
-## API: CV Upload
+   To run exclusively through the HTTP API, start the API server in one terminal, then run:
+   ```sh
+   uv run python run_full_pipeline_with_api.py
+   ```
 
-`POST /cv/upload` accepts a PDF as multipart field `file` (maximum 10 MB), stores a pending CV record, and starts parsing in the background. Response includes `cv_id` and initial `status`.
+## API
 
 ```sh
 curl -F "file=@cv.pdf" http://localhost:8000/cv/upload
 ```
-
-Use `GET /cv` to list CVs, `GET /cv/{cv_id}` to retrieve one CV, and `GET /cv/{cv_id}/status` to check parsing status.
-
-## API: Job Description
-
-`POST /jd` accepts multipart form data with `source_type` set to `pasted`, `url`, or `file`; provide `text`, `url`, or `file` respectively. File uploads support PDF, TXT, and HTML (maximum 10 MB). Parsing runs in the background. Use `GET /jd`, `GET /jd/{jd_id}`, and `GET /jd/{jd_id}/status` to retrieve descriptions and parsing status.
 
 ```sh
 curl -F "source_type=pasted" -F "text=Senior engineer; Python and API experience required" http://localhost:8000/jd
 curl -F "source_type=url" -F "url=https://example.com/jobs/role" http://localhost:8000/jd
 curl -F "source_type=file" -F "file=@job-description.pdf" http://localhost:8000/jd
 ```
-
-## API: Start Pipeline
-
-`POST /pipeline/start` requires completed CV and JD records. It returns `run_id` and starts processing in the background.
-Use `GET /pipeline/{run_id}/operations` to inspect each tracked LLM operation, token usage, model, and cost, plus the run's summed operation cost.
 
 ```sh
 curl -X POST http://localhost:8000/pipeline/start -H "Content-Type: application/json" -d "{\"cv_id\":1,\"jd_id\":1}"
@@ -100,12 +92,6 @@ pipeline/
 └── uploads/              # Uploaded CVs/JDs
 ```
 
-## Pipeline Phases (Implemented)
-
-- **Phase 7:** Project + Skill questions (3-5 per project, 2-3 per skill)
-- **Phase 8:** Merge/dedupe/rerank (embeddings-based dedup, coverage check, JD relevance rerank)
-- **Phase 9:** LLM judge evaluation (in progress)
-- **Phase 10:** CV-JD fitness scoring
 
 ## Testing
 
@@ -113,20 +99,15 @@ pipeline/
 uv run pytest
 ```
 
-All tests pass. Coverage: parsers, security, triage, enrichment, generation, merge, dedup.
 
 ## Cost
 
 Variable based on CV/JD complexity. ~$0.05–0.20 per full pipeline run (parsing + question generation).
 
-## Interview Control Agent (Phase 11b, Coming)
+## Interview Control Agent
 
 The interview control agent will manage:
 - Question flow decisions (next question vs probe deeper)
 - Answered questions tracking (state, timestamps)
 - Exit conditions (all questions asked, time limit, fatigue)
 - Answer persistence (save state after each turn)
-
----
-
-**Part of InterVideo monorepo. See `/meta/brief.md` for full system architecture.**
