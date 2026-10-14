@@ -1,13 +1,19 @@
 """Tests for API-only end-to-end pipeline runner."""
 
 import asyncio
+import io
 import json
 from pathlib import Path
+import sys
 
 import httpx
 import pytest
 
-from run_full_pipeline_with_api import _request, _wait_for_status, run_full_pipeline
+from run_full_pipeline_with_api import (
+    _request,
+    _wait_for_status,
+    run_full_pipeline,
+)
 
 
 def test_runner_uses_api_for_upload_parse_run_and_results(tmp_path, capsys):
@@ -131,6 +137,43 @@ def test_runner_identifies_blank_http_timeout_errors():
         asyncio.run(run())
 
 
+def test_runner_retries_transient_read_error_on_get():
+    attempts = 0
+
+    def handler(request):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ReadError("")
+        return httpx.Response(200, json={"status": "completed"})
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(handler)
+        ) as client:
+            return await _request(client, "GET", "/pipeline/30")
+
+    assert asyncio.run(run()) == {"status": "completed"}
+    assert attempts == 2
+
+
+def test_runner_explains_exhausted_read_error():
+    def handler(request):
+        raise httpx.ReadError("")
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(handler)
+        ) as client:
+            return await _request(client, "GET", "/pipeline/30")
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"GET /pipeline/30: API closed the connection.*Check API server logs",
+    ):
+        asyncio.run(run())
+
+
 def test_runner_does_not_repeat_progress_logs_when_not_interactive(
     tmp_path, capsys
 ):
@@ -165,6 +208,41 @@ def test_runner_does_not_repeat_progress_logs_when_not_interactive(
     assert output.count("CV parsing: waiting...") == 1
     assert output.count("CV parsing: completed") == 1
     assert "CV parsing: processing" not in output
+
+
+def test_runner_updates_tty_while_api_request_is_pending(monkeypatch):
+    class TTYCapture(io.StringIO):
+        def isatty(self):
+            return True
+
+    output = TTYCapture()
+    monkeypatch.setattr(sys, "stdout", output)
+    attempts = 0
+
+    async def handler(request):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            await asyncio.sleep(1.1)
+            return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(200, json={"status": "completed"})
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test",
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            return await _wait_for_status(
+                client,
+                "/cv/10/status",
+                "CV parsing",
+                poll_interval=0.001,
+                timeout=2,
+            )
+
+    assert asyncio.run(run())["status"] == "completed"
+    assert "checking API" in output.getvalue()
+    assert "completed" in output.getvalue()
 
 
 def test_runner_rejects_non_pdf_input(tmp_path):

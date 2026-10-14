@@ -36,16 +36,16 @@ async def _run_pipeline_in_background(
     db_path: str,
 ) -> None:
     """Execute pipeline and persist an error status if graph execution fails."""
-    update_pipeline_run_status(run_id, "running", db_path=db_path)
-    state = PipelineState(
-        run_id=run_id,
-        cv_id=cv_id,
-        jd_id=jd_id,
-        prompt_version=prompt_version,
-        db_path=db_path,
-        status="running",
-    )
     try:
+        update_pipeline_run_status(run_id, "running", db_path=db_path)
+        state = PipelineState(
+            run_id=run_id,
+            cv_id=cv_id,
+            jd_id=jd_id,
+            prompt_version=prompt_version,
+            db_path=db_path,
+            status="running",
+        )
         await run_pipeline(state, db_path)
     except Exception as err:
         logger.exception("Pipeline run %s failed", run_id)

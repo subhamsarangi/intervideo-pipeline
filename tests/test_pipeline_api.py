@@ -1,5 +1,6 @@
 """Tests for pipeline API routes."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from src.api import app as api_module
 from src.api.routes import pipeline as pipeline_routes
+from src.api.routes.pipeline import _run_pipeline_in_background
 from src.database.db import (
     create_cv,
     create_jd,
@@ -82,6 +84,32 @@ def test_start_pipeline_records_execution_failure(client, monkeypatch):
     assert response.status_code == 202
     assert run["status"] == "failed"
     assert run["error_message"] == "RuntimeError: graph unavailable"
+
+
+def test_background_startup_failure_is_recorded_not_left_pending(monkeypatch):
+    statuses = []
+
+    def update_status(run_id, status, error_message=None, db_path=None):
+        statuses.append((run_id, status, error_message, db_path))
+        if status == "running":
+            raise RuntimeError("could not mark run running")
+
+    execute = AsyncMock()
+    monkeypatch.setattr(pipeline_routes, "update_pipeline_run_status", update_status)
+    monkeypatch.setattr(pipeline_routes, "run_pipeline", execute)
+
+    asyncio.run(_run_pipeline_in_background(12, 3, 3, None, "db.sqlite"))
+
+    assert statuses == [
+        (12, "running", None, "db.sqlite"),
+        (
+            12,
+            "failed",
+            "RuntimeError: could not mark run running",
+            "db.sqlite",
+        ),
+    ]
+    execute.assert_not_awaited()
 
 
 def test_get_pipeline_operations_returns_usage_and_cost(client):

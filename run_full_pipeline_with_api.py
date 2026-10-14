@@ -14,17 +14,29 @@ import httpx
 async def _request(
     client: httpx.AsyncClient, method: str, path: str, **kwargs: Any
 ) -> Any:
-    try:
-        response = await client.request(method, path, **kwargs)
-    except httpx.TimeoutException as err:
-        raise RuntimeError(
-            f"{method} {path} timed out ({type(err).__name__})"
-        ) from err
-    except httpx.RequestError as err:
-        detail = str(err).strip() or repr(err)
-        raise RuntimeError(
-            f"{method} {path} request failed ({type(err).__name__}): {detail}"
-        ) from err
+    read_retries = 2 if method.upper() == "GET" else 0
+    for attempt in range(read_retries + 1):
+        try:
+            response = await client.request(method, path, **kwargs)
+            break
+        except httpx.TimeoutException as err:
+            raise RuntimeError(
+                f"{method} {path} timed out ({type(err).__name__})"
+            ) from err
+        except httpx.ReadError as err:
+            if attempt < read_retries:
+                await asyncio.sleep(0.5 * (attempt + 1))
+                continue
+            raise RuntimeError(
+                f"{method} {path}: API closed the connection while sending its "
+                f"response after {attempt + 1} attempts. Check API server logs "
+                "for the request traceback and verify GET /health."
+            ) from err
+        except httpx.RequestError as err:
+            detail = str(err).strip() or repr(err)
+            raise RuntimeError(
+                f"{method} {path} request failed ({type(err).__name__}): {detail}"
+            ) from err
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as err:
@@ -53,19 +65,50 @@ async def _wait_for_status(
     frame = 0
     line_width = 0
     is_tty = sys.stdout.isatty()
+    last_log = started_at
     if not is_tty:
         print(f"   {label}: waiting...", flush=True)
 
     while True:
-        result = await _request(client, "GET", path)
+        request_task = asyncio.create_task(_request(client, "GET", path))
+        while not request_task.done():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                request_task.cancel()
+                await asyncio.gather(request_task, return_exceptions=True)
+                raise TimeoutError(
+                    f"Timed out waiting for {label} after {timeout:g}s "
+                    f"(last API request: GET {path})"
+                )
+            await asyncio.wait({request_task}, timeout=min(1.0, remaining))
+            if request_task.done():
+                break
+            elapsed = int(time.monotonic() - started_at)
+            if is_tty:
+                line = (
+                    f"   {label}: {spinner[frame % len(spinner)]} "
+                    f"checking API ({elapsed}s)"
+                )
+                sys.stdout.write(
+                    f"\r{line}{' ' * max(0, line_width - len(line))}"
+                )
+                sys.stdout.flush()
+                line_width = max(line_width, len(line))
+                frame += 1
+            elif time.monotonic() - last_log >= 10:
+                print(f"   {label}: still waiting ({elapsed}s)", flush=True)
+                last_log = time.monotonic()
+
+        result = request_task.result()
         status = result["status"]
         if is_tty:
             elapsed = int(time.monotonic() - started_at)
-            line = f"   {label}: {spinner[frame % len(spinner)]} {status} ({elapsed}s)"
-            sys.stdout.write(f"\r{line}{' ' * max(0, line_width - len(line))}")
+            line = f"   {label}: {status} ({elapsed}s)"
+            sys.stdout.write(
+                f"\r{line}{' ' * max(0, line_width - len(line))}"
+            )
             sys.stdout.flush()
             line_width = max(line_width, len(line))
-            frame += 1
         if status == "completed":
             if is_tty:
                 line = f"   {label}: completed"
@@ -87,7 +130,9 @@ async def _wait_for_status(
             if is_tty:
                 line = f"   {label}: timed out"
                 print(f"\r{line}{' ' * max(0, line_width - len(line))}")
-            raise TimeoutError(f"Timed out waiting for {label} after {timeout:g}s")
+            raise TimeoutError(
+                f"Timed out waiting for {label} after {timeout:g}s"
+            )
         await asyncio.sleep(poll_interval)
 
 
