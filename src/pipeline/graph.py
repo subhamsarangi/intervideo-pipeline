@@ -12,6 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 import aiosqlite
 
 from src.models.pipeline import PipelineState
+from src.database.db import update_pipeline_run_status
 from src.pipeline.nodes.security import security_node
 from src.pipeline.nodes.triage import triage_node
 from src.pipeline.nodes.enrichment import enrichment_node
@@ -135,7 +136,7 @@ async def run_pipeline(
         
         # Run graph async
         final_state = await graph.ainvoke(state_dict, config)
-        
+        update_pipeline_run_status(state.run_id, status="completed", db_path=db_path)
         logger.info(f"Pipeline {thread_id} completed successfully")
         return final_state
         

@@ -255,18 +255,38 @@ def update_pipeline_run_status(
     error_message: Optional[str] = None,
     db_path: Optional[str] = None,
 ) -> None:
-    """Update pipeline run status"""
+    """Update pipeline run status and aggregate recorded operation costs on completion."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
+        total_cost_usd = None
+        if status == "completed":
+            cursor.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_operations WHERE run_id = ?",
+                (run_id,),
+            )
+            total_cost_usd = cursor.fetchone()[0]
+
         if output_json:
             cursor.execute(
-                "UPDATE pipeline_runs SET status = ?, output_json = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (status, json.dumps(output_json), error_message, run_id),
+                """
+                UPDATE pipeline_runs
+                SET status = ?, output_json = ?, error_message = ?,
+                    total_cost_usd = COALESCE(?, total_cost_usd),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (status, json.dumps(output_json), error_message, total_cost_usd, run_id),
             )
         else:
             cursor.execute(
-                "UPDATE pipeline_runs SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (status, error_message, run_id),
+                """
+                UPDATE pipeline_runs
+                SET status = ?, error_message = ?,
+                    total_cost_usd = COALESCE(?, total_cost_usd),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (status, error_message, total_cost_usd, run_id),
             )
 
 

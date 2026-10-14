@@ -35,6 +35,7 @@ def migrate_up(db_path: Optional[str] = None) -> None:
         "001_init_schema": init_schema,
         "002_add_llm_tracking": add_llm_tracking_columns,
         "003_add_llm_operations": add_llm_operations_table,
+        "004_add_pipeline_run_cost": add_pipeline_run_cost,
     }
 
     # Apply pending migrations
@@ -129,6 +130,17 @@ def add_llm_operations_table(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_llm_operations_step ON llm_operations(step_id);
         """
     )
+
+
+def add_pipeline_run_cost(conn: sqlite3.Connection) -> None:
+    """004: Store aggregated LLM operation cost on each pipeline run"""
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs)").fetchall()
+    }
+    if "total_cost_usd" not in columns:
+        conn.execute(
+            "ALTER TABLE pipeline_runs ADD COLUMN total_cost_usd REAL NOT NULL DEFAULT 0.0"
+        )
 
 
 def migrate_down(db_path: Optional[str] = None) -> None:

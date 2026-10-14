@@ -16,6 +16,14 @@ from src.pipeline.graph import (
     should_enrich,
 )
 from src.models.pipeline import PipelineState
+from src.database.db import (
+    create_cv,
+    create_jd,
+    create_pipeline_run,
+    get_pipeline_run,
+    init_db,
+)
+from src.utils.llm_tracking import increment_llm_calls, MODEL_COSTS
 
 
 class TestConditionalLogic:
@@ -89,28 +97,51 @@ class TestPipelineExecution:
     """Test full pipeline execution flow."""
     
     @pytest.mark.asyncio
-    async def test_run_pipeline_minimal_mock(self):
+    async def test_run_pipeline_minimal_mock(self, tmp_path):
         """Pipeline execution with mocked build_graph."""
+        db_path = str(tmp_path / "pipeline.db")
+        init_db(db_path)
+        cv_id = create_cv("CV", "text", db_path)
+        jd_id = create_jd("JD", "text", db_path=db_path)
+        run_id = create_pipeline_run(cv_id, jd_id, "test", db_path)
         state = PipelineState(
-            run_id=1,
-            cv_id=1,
-            jd_id=1,
-            db_path=":memory:",
+            run_id=run_id,
+            cv_id=cv_id,
+            jd_id=jd_id,
+            db_path=db_path,
         )
         
         # Mock build_graph to return a fake graph that doesn't actually invoke nodes
         with patch("src.pipeline.graph.build_graph") as mock_build:
             mock_graph = AsyncMock()
-            mock_graph.ainvoke = AsyncMock(return_value={"status": "success"})
+            async def invoke_with_operation(*args, **kwargs):
+                increment_llm_calls(
+                    operation="test_operation",
+                    model="gpt-5.4-nano",
+                    input_tokens=1000,
+                    output_tokens=500,
+                    run_id=run_id,
+                    db_path=db_path,
+                )
+                return {"status": "success"}
+
+            mock_graph.ainvoke = AsyncMock(side_effect=invoke_with_operation)
             mock_build.return_value = mock_graph
             
             # Execute pipeline
-            result = await run_pipeline(state, ":memory:")
+            result = await run_pipeline(state, db_path)
             
             # Verify build_graph and ainvoke were called
             assert mock_build.called
             assert mock_graph.ainvoke.called
             assert result == {"status": "success"}
+            run = get_pipeline_run(run_id, db_path)
+            assert run["status"] == "completed"
+            expected_cost = (
+                1000 * MODEL_COSTS["gpt-5.4-nano"]["input"]
+                + 500 * MODEL_COSTS["gpt-5.4-nano"]["output"]
+            ) / 1_000_000
+            assert run["total_cost_usd"] == pytest.approx(expected_cost)
     
     @pytest.mark.asyncio
     async def test_checkpoint_creation(self):

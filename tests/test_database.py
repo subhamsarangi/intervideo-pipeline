@@ -140,6 +140,29 @@ class TestPipelineRuns:
         run = get_pipeline_run(run_id, test_db)
         assert run["status"] == "completed"
         assert json.loads(run["output_json"]) == output
+        assert run["total_cost_usd"] == 0.0
+
+    def test_completed_pipeline_run_aggregates_operation_cost(self, test_db):
+        cv_id = create_cv("CV", "text", test_db)
+        jd_id = create_jd("JD", "text", "pasted", None, test_db)
+        run_id = create_pipeline_run(cv_id, jd_id, "v1.0", test_db)
+
+        with get_connection(test_db) as conn:
+            conn.execute(
+                """
+                INSERT INTO llm_operations
+                    (run_id, operation, model, input_tokens, output_tokens, cost_usd)
+                VALUES (?, 'first', 'test-model', 10, 5, 0.125),
+                       (?, 'second', 'test-model', 20, 10, 0.375)
+                """,
+                (run_id, run_id),
+            )
+
+        update_pipeline_run_status(run_id, "completed", db_path=test_db)
+
+        run = get_pipeline_run(run_id, test_db)
+        assert run["status"] == "completed"
+        assert run["total_cost_usd"] == pytest.approx(0.5)
 
     def test_list_pipeline_runs(self, test_db):
         cv_id = create_cv("CV", "text", test_db)
@@ -279,6 +302,7 @@ class TestMigrations:
             cursor.execute("SELECT name FROM migrations")
             applied = [row[0] for row in cursor.fetchall()]
             assert "001_init_schema" in applied
+            assert "004_add_pipeline_run_cost" in applied
 
         # Cleanup
         os.remove(db_path)
@@ -327,3 +351,33 @@ class TestMigrations:
             assert conn.execute(
                 "SELECT COUNT(*) FROM migrations WHERE name = '003_add_llm_operations'"
             ).fetchone()[0] == 1
+
+    def test_pipeline_run_cost_migration_on_existing_database(self, tmp_path):
+        db_path = str(tmp_path / "legacy_run_cost.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE migrations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO migrations (name) VALUES
+                    ('001_init_schema'),
+                    ('002_add_llm_tracking'),
+                    ('003_add_llm_operations');
+                CREATE TABLE pipeline_runs (id INTEGER PRIMARY KEY);
+                CREATE TABLE pipeline_steps (id INTEGER PRIMARY KEY);
+                """
+            )
+
+        migrate_up(db_path)
+
+        with sqlite3.connect(db_path) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(pipeline_runs)")
+            }
+            assert "total_cost_usd" in columns
+            assert conn.execute(
+                "SELECT name FROM migrations WHERE name = '004_add_pipeline_run_cost'"
+            ).fetchone()

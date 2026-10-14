@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cv_id INTEGER NOT NULL,
     jd_id INTEGER NOT NULL,
+    total_cost_usd REAL NOT NULL DEFAULT 0.0,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed')),
     prompt_version TEXT,
     output_json JSON,
