@@ -14,15 +14,29 @@ import httpx
 async def _request(
     client: httpx.AsyncClient, method: str, path: str, **kwargs: Any
 ) -> Any:
-    response = await client.request(method, path, **kwargs)
+    try:
+        response = await client.request(method, path, **kwargs)
+    except httpx.TimeoutException as err:
+        raise RuntimeError(
+            f"{method} {path} timed out ({type(err).__name__})"
+        ) from err
+    except httpx.RequestError as err:
+        detail = str(err).strip() or repr(err)
+        raise RuntimeError(
+            f"{method} {path} request failed ({type(err).__name__}): {detail}"
+        ) from err
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as err:
         try:
-            detail = response.json().get("detail", response.text)
+            payload = response.json()
+            detail = payload.get("detail") if isinstance(payload, dict) else None
         except ValueError:
-            detail = response.text
-        raise RuntimeError(f"{method} {path} failed ({response.status_code}): {detail}") from err
+            detail = None
+        detail = detail or response.text.strip() or response.reason_phrase
+        raise RuntimeError(
+            f"{method} {path} failed ({response.status_code}): {detail}"
+        ) from err
     return response.json()
 
 
@@ -34,17 +48,45 @@ async def _wait_for_status(
     timeout: float,
 ) -> dict:
     deadline = time.monotonic() + timeout
+    started_at = time.monotonic()
+    spinner = ("|", "/", "-", "\\")
+    frame = 0
+    line_width = 0
+    is_tty = sys.stdout.isatty()
+    if not is_tty:
+        print(f"   {label}: waiting...", flush=True)
+
     while True:
         result = await _request(client, "GET", path)
         status = result["status"]
-        print(f"   {label}: {status}", flush=True)
+        if is_tty:
+            elapsed = int(time.monotonic() - started_at)
+            line = f"   {label}: {spinner[frame % len(spinner)]} {status} ({elapsed}s)"
+            sys.stdout.write(f"\r{line}{' ' * max(0, line_width - len(line))}")
+            sys.stdout.flush()
+            line_width = max(line_width, len(line))
+            frame += 1
         if status == "completed":
+            if is_tty:
+                line = f"   {label}: completed"
+                print(f"\r{line}{' ' * max(0, line_width - len(line))}")
+            else:
+                print(f"   {label}: completed", flush=True)
             return result
         if status == "failed":
+            if is_tty:
+                line = f"   {label}: failed"
+                print(f"\r{line}{' ' * max(0, line_width - len(line))}")
+            else:
+                print(f"   {label}: failed", flush=True)
+            detail = result.get("error_message")
             raise RuntimeError(
-                f"{label} failed: {result.get('error_message') or 'unknown error'}"
+                f"{label} failed: {detail.strip() if isinstance(detail, str) and detail.strip() else 'API returned no error details; inspect server logs'}"
             )
         if time.monotonic() >= deadline:
+            if is_tty:
+                line = f"   {label}: timed out"
+                print(f"\r{line}{' ' * max(0, line_width - len(line))}")
             raise TimeoutError(f"Timed out waiting for {label} after {timeout:g}s")
         await asyncio.sleep(poll_interval)
 
@@ -141,7 +183,8 @@ def main() -> int:
     try:
         return asyncio.run(_async_main(args))
     except (httpx.HTTPError, RuntimeError, TimeoutError, FileNotFoundError, ValueError) as err:
-        print(f"\nERROR: {err}", file=sys.stderr)
+        detail = str(err).strip() or repr(err) or type(err).__name__
+        print(f"\nERROR [{type(err).__name__}]: {detail}", file=sys.stderr)
         return 1
 
 

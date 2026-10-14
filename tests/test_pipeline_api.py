@@ -81,7 +81,7 @@ def test_start_pipeline_records_execution_failure(client, monkeypatch):
     run = get_pipeline_run(response.json()["run_id"], db_path)
     assert response.status_code == 202
     assert run["status"] == "failed"
-    assert run["error_message"] == "graph unavailable"
+    assert run["error_message"] == "RuntimeError: graph unavailable"
 
 
 def test_get_pipeline_operations_returns_usage_and_cost(client):

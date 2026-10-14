@@ -86,7 +86,7 @@ def test_create_url_jd_records_parse_failure(client, monkeypatch):
     assert response.status_code == 202
     assert jd["source_url"] == "https://example.com/job"
     assert jd["status"] == "failed"
-    assert jd["error_message"] == "URL could not be fetched"
+    assert jd["error_message"] == "ValueError: URL could not be fetched"
 
 
 def test_create_url_jd_parses_in_background(client, monkeypatch):

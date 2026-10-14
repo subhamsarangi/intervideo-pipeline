@@ -39,7 +39,12 @@ async def _parse_uploaded_cv(cv_id: int, file_path: Path, db_path: str) -> None:
         await parse_cv(str(file_path), cv_id=cv_id, db_path=db_path)
     except Exception as err:
         logger.exception("CV parsing failed for CV %s", cv_id)
-        update_cv_status(cv_id, "failed", error_message=str(err), db_path=db_path)
+        update_cv_status(
+            cv_id,
+            "failed",
+            error_message=f"{type(err).__name__}: {str(err).strip() or repr(err)}",
+            db_path=db_path,
+        )
     finally:
         file_path.unlink(missing_ok=True)
 

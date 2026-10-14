@@ -61,7 +61,12 @@ async def _parse_uploaded_jd(
         )
     except Exception as err:
         logger.exception("JD parsing failed for JD %s", jd_id)
-        update_jd_status(jd_id, "failed", error_message=str(err), db_path=db_path)
+        update_jd_status(
+            jd_id,
+            "failed",
+            error_message=f"{type(err).__name__}: {str(err).strip() or repr(err)}",
+            db_path=db_path,
+        )
     finally:
         if file_path is not None:
             file_path.unlink(missing_ok=True)

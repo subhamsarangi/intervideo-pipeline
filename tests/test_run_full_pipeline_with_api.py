@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from run_full_pipeline_with_api import run_full_pipeline
+from run_full_pipeline_with_api import _request, _wait_for_status, run_full_pipeline
 
 
 def test_runner_uses_api_for_upload_parse_run_and_results(tmp_path, capsys):
@@ -86,6 +86,85 @@ def test_runner_reports_failed_background_parse(tmp_path):
 
     with pytest.raises(RuntimeError, match="CV parsing failed: parser failed"):
         asyncio.run(run())
+
+
+def test_runner_explains_failure_when_api_has_no_error_message(tmp_path):
+    cv_path = tmp_path / "candidate.pdf"
+    jd_path = tmp_path / "role.pdf"
+    cv_path.write_bytes(b"%PDF-1.7 cv")
+    jd_path.write_bytes(b"%PDF-1.7 jd")
+
+    def handler(request):
+        if request.method == "POST" and request.url.path == "/cv/upload":
+            return httpx.Response(202, json={"cv_id": 10, "status": "pending"})
+        if request.method == "GET" and request.url.path == "/cv/10/status":
+            return httpx.Response(200, json={"status": "failed", "error_message": ""})
+        return httpx.Response(404)
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(handler)
+        ) as client:
+            return await run_full_pipeline(client, cv_path, jd_path, timeout=1)
+
+    with pytest.raises(
+        RuntimeError,
+        match="API returned no error details; inspect server logs",
+    ):
+        asyncio.run(run())
+
+
+def test_runner_identifies_blank_http_timeout_errors():
+    def handler(request):
+        raise httpx.ReadTimeout("")
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(handler)
+        ) as client:
+            return await _request(client, "GET", "/pipeline/30")
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"GET /pipeline/30 timed out \(ReadTimeout\)",
+    ):
+        asyncio.run(run())
+
+
+def test_runner_does_not_repeat_progress_logs_when_not_interactive(
+    tmp_path, capsys
+):
+    statuses = iter(
+        [
+            {"status": "processing"},
+            {"status": "processing"},
+            {"status": "completed"},
+        ]
+    )
+
+    def handler(request):
+        if request.method == "GET" and request.url.path == "/cv/10/status":
+            return httpx.Response(200, json=next(statuses))
+        return httpx.Response(404)
+
+    async def run():
+        async with httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(handler)
+        ) as client:
+            return await _wait_for_status(
+                client,
+                "/cv/10/status",
+                "CV parsing",
+                poll_interval=0.001,
+                timeout=1,
+            )
+
+    result = asyncio.run(run())
+    assert result["status"] == "completed"
+    output = capsys.readouterr().out
+    assert output.count("CV parsing: waiting...") == 1
+    assert output.count("CV parsing: completed") == 1
+    assert "CV parsing: processing" not in output
 
 
 def test_runner_rejects_non_pdf_input(tmp_path):

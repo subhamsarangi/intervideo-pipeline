@@ -67,7 +67,7 @@ def test_upload_cv_records_background_parse_failure(client, monkeypatch):
     cv = get_cv(response.json()["cv_id"], db_path)
     assert response.status_code == 202
     assert cv["status"] == "failed"
-    assert cv["error_message"] == "parser unavailable"
+    assert cv["error_message"] == "RuntimeError: parser unavailable"
     assert list(upload_dir.iterdir()) == []
 
 

@@ -52,7 +52,7 @@ async def _run_pipeline_in_background(
         update_pipeline_run_status(
             run_id,
             status="failed",
-            error_message=str(err),
+            error_message=f"{type(err).__name__}: {str(err).strip() or repr(err)}",
             db_path=db_path,
         )
 
