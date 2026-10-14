@@ -10,11 +10,15 @@ from src.api.routes import pipeline as pipeline_routes
 from src.database.db import (
     create_cv,
     create_jd,
+    create_pipeline_run,
+    create_pipeline_step,
     get_pipeline_run,
+    get_connection,
     init_db,
     update_cv_status,
     update_jd_status,
 )
+from src.utils.llm_tracking import MODEL_COSTS, increment_llm_calls
 
 
 @pytest.fixture
@@ -78,6 +82,68 @@ def test_start_pipeline_records_execution_failure(client, monkeypatch):
     assert response.status_code == 202
     assert run["status"] == "failed"
     assert run["error_message"] == "graph unavailable"
+
+
+def test_get_pipeline_operations_returns_usage_and_cost(client):
+    test_client, db_path = client
+    cv_id, jd_id = _create_ready_inputs(db_path)
+    run_id = create_pipeline_run(cv_id, jd_id, db_path=db_path)
+    step_id = create_pipeline_step(run_id, "question_generation", db_path=db_path)
+    increment_llm_calls(
+        operation="generate_questions",
+        model="gpt-5.4-nano",
+        input_tokens=1000,
+        output_tokens=500,
+        run_id=run_id,
+        step_id=step_id,
+        db_path=db_path,
+    )
+
+    response = test_client.get(f"/pipeline/{run_id}/operations")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run_id"] == run_id
+    assert len(body["operations"]) == 1
+    operation = body["operations"][0]
+    assert operation["run_id"] == run_id
+    assert operation["step_id"] == step_id
+    assert operation["operation"] == "generate_questions"
+    assert operation["model"] == "gpt-5.4-nano"
+    assert operation["input_tokens"] == 1000
+    assert operation["output_tokens"] == 500
+    expected_cost = (
+        1000 * MODEL_COSTS["gpt-5.4-nano"]["input"]
+        + 500 * MODEL_COSTS["gpt-5.4-nano"]["output"]
+    ) / 1_000_000
+    assert operation["cost_usd"] == pytest.approx(expected_cost)
+    with get_connection(db_path) as conn:
+        total_cost = conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0.0) FROM llm_operations WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()[0]
+    assert body["total_cost_usd"] == pytest.approx(total_cost)
+
+
+def test_get_pipeline_operations_returns_empty_list_for_run_without_calls(client):
+    test_client, db_path = client
+    cv_id, jd_id = _create_ready_inputs(db_path)
+    run_id = create_pipeline_run(cv_id, jd_id, db_path=db_path)
+
+    response = test_client.get(f"/pipeline/{run_id}/operations")
+
+    assert response.status_code == 200
+    assert response.json()["operations"] == []
+    assert response.json()["total_cost_usd"] == 0
+
+
+def test_get_pipeline_operations_returns_404_for_missing_run(client):
+    test_client, _ = client
+
+    response = test_client.get("/pipeline/999/operations")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Pipeline run not found"
 
 
 @pytest.mark.parametrize(

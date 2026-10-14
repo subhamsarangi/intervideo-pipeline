@@ -302,6 +302,25 @@ def list_pipeline_runs(
         return [dict(row) for row in cursor.fetchall()]
 
 
+def list_llm_operations_by_run(
+    run_id: int, db_path: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """List LLM operation usage and costs for a pipeline run."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, run_id, step_id, operation, model,
+                   input_tokens, output_tokens, cost_usd, timestamp
+            FROM llm_operations
+            WHERE run_id = ?
+            ORDER BY timestamp, id
+            """,
+            (run_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
 # Pipeline Steps
 def create_pipeline_step(
     run_id: int, step_name: str, db_path: Optional[str] = None

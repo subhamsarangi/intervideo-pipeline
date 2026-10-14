@@ -10,6 +10,7 @@ from ...database.db import (
     get_db_path,
     get_jd,
     get_pipeline_run,
+    list_llm_operations_by_run,
     list_questions_by_run,
     get_pipeline_steps,
     update_pipeline_run_status,
@@ -138,3 +139,20 @@ async def get_run_steps(run_id: int) -> List[Dict[str, Any]]:
     
     steps = get_pipeline_steps(run_id)
     return steps
+
+
+@router.get("/{run_id}/operations")
+async def get_run_operations(run_id: int) -> Dict[str, Any]:
+    """Get per-operation LLM usage and aggregated cost for a run."""
+    run = get_pipeline_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Pipeline run not found")
+
+    operations = list_llm_operations_by_run(run_id)
+    return {
+        "run_id": run_id,
+        "total_cost_usd": round(
+            sum(operation["cost_usd"] for operation in operations), 10
+        ),
+        "operations": operations,
+    }

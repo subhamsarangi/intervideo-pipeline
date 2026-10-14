@@ -74,9 +74,11 @@ curl -F "source_type=file" -F "file=@job-description.pdf" http://localhost:8000/
 ## API: Start Pipeline
 
 `POST /pipeline/start` requires completed CV and JD records. It returns `run_id` and starts processing in the background.
+Use `GET /pipeline/{run_id}/operations` to inspect each tracked LLM operation, token usage, model, and cost, plus the run's summed operation cost.
 
 ```sh
 curl -X POST http://localhost:8000/pipeline/start -H "Content-Type: application/json" -d "{\"cv_id\":1,\"jd_id\":1}"
+curl http://localhost:8000/pipeline/1/operations
 ```
 
 ## Project Structure
